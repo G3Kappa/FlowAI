@@ -64,6 +64,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Consumers\Plumbing\SequentialFlowInputJunction.cs" />
+    <Compile Include="Exceptions\FlowInterruptedException.cs" />
     <Compile Include="Hybrids\FlowHybridBase.cs" />
     <Compile Include="Hybrids\Machines\FlowMapper.cs" />
     <Compile Include="AsyncExtensions.cs" />
@@ -78,6 +79,7 @@
     <Compile Include="Consumers\Plumbing\FlowInputJunction.cs" />
     <Compile Include="Producers\FlowProducerBase.cs" />
     <Compile Include="Consumers\IFlowConsumer.cs" />
+    <Compile Include="Producers\Plumbing\ReducingFlowOutputJunction.cs" />
     <Compile Include="Producers\Plumbing\SplittingFlowOutputJunction.cs" />
     <Compile Include="Producers\Plumbing\FlowOutputJunctionBase.cs" />
     <Compile Include="Producers\Sequences\FlowSequence.cs" />

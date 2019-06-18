@@ -1,4 +1,5 @@
-﻿using System;
+﻿using FlowAI.Exceptions;
+using System;
 using System.Collections.Async;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +20,35 @@ namespace FlowAI
         /// </summary>
         /// <returns>True if the faucet could be closed or was already closed.</returns>
         public virtual async Task<bool> StaunchFlow() => await Task.Run(() => !(IsOpen = false));
+
+        public FlowInterruptedException<T> LastError { get; private set; }
+        /// <summary>
+        /// Called when this producer should break off the current flow.
+        /// </summary>
+        /// <param name="restart">If false, the flow must then be manually restarted to indicate that error handling took place.</param>
+        public async Task<bool> InterruptFlow(FlowInterruptedException<T> reason = null, bool restart = false)
+        {
+            if(IsFlowStarted() && await StaunchFlow())
+            {
+                Flow().Dispose();
+
+                LastError = reason ?? LastError;
+#if DEBUG
+                if(reason != null)
+                {
+                    throw reason; // lmao
+                }
+#else
+                if (reason?.Fatal ?? false)
+                {
+                    throw reason; // lol
+                }
+#endif
+
+                return restart || await StartFlow();
+            }
+            return false;
+        }
 
         public virtual bool IsFlowStarted() => IsOpen;
 

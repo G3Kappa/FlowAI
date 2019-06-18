@@ -1,4 +1,5 @@
-﻿using System.Collections.Async;
+﻿using FlowAI.Exceptions;
+using System.Collections.Async;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -31,6 +32,7 @@ namespace FlowAI
                 while (true)
                 {
                     if (Queue.TryDequeue(out T ret)) return ret;
+                    Task.Run(async () => await InterruptFlow(new FlowInterruptedException<T>(this, "Drip", fatal: true))).Wait();
                 }
             });
         }

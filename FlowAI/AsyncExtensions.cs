@@ -118,7 +118,7 @@ namespace FlowAI
         /// <summary>
         /// Collects the elements of an IAsyncEnumerator into a regular enumerable.
         /// </summary>
-        public static async Task<IProducerConsumerCollection<T>> Collect<T>(this IAsyncEnumerator<T> e, int maxCount=0)
+        public static async Task<IProducerConsumerCollection<T>> Collect<T>(this IAsyncEnumerator<T> e, int maxCount = 0)
         {
             var queue = new ConcurrentQueue<T>();
             await e.ForEachAsync(t =>
