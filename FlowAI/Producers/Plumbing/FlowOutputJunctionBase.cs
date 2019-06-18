@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using System.Collections.Async;
+using System.Collections.Concurrent;
 
 
 namespace FlowAI
@@ -8,10 +9,10 @@ namespace FlowAI
     /// </summary>
     public abstract class FlowOutputJunctionBase<T> : FlowProducerBase<T>
     {
-        public IProducerConsumerCollection<IFlowProducer<T>> Producers { get; }
-        public FlowOutputJunctionBase(params IFlowProducer<T>[] producers)
+        public IProducerConsumerCollection<IAsyncEnumerator<T>> Flows { get; }
+        public FlowOutputJunctionBase(params IAsyncEnumerator<T>[] flows)
         {
-            Producers = new ConcurrentBag<IFlowProducer<T>>(producers);
+            Flows = new ConcurrentQueue<IAsyncEnumerator<T>>(flows);
         }
     }
 }

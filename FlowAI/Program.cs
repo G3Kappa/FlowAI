@@ -37,6 +37,7 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Splitting output junctions ", TestSplittingOutputJunctions1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowMapper on a sequence   ", TestChunkMap(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowFilter on a sequence   ", TestChunkFilter(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Complex piping w/ reductor ", TestComplexPiping(), passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -134,8 +135,8 @@ namespace FlowAI
             // Create a receiving buffer for the resulting sequence
             var buf = new FlowBuffer<char>(capacity: 10);
             // Pipe the two sequences sequentially into the buffer with a splitting output junction
-            // Here chunkSize: 5 means "take 5 droplets from B, then 5 from A, then 5 from B..."
-            var pipe = new SplittingFlowOutputJunction<char>(chunkSize: 5, seqB, seqA);
+            // Here chunkSize: 5 means "take 5 droplets from A, then 5 from B, then 5 from A..."
+            var pipe = new SplittingFlowOutputJunction<char>(chunkSize: 5, seqA.Flow(), seqB.Flow());
             // Collect the results into buf by consuming from map through which the splitter is being piped
             await buf.ConsumeFlowUntilFull(map, map.PipeFlow(pipe, pipe.Flow())).Collect();
             // Now the buffer contains: "HELLOworld"
@@ -163,20 +164,38 @@ namespace FlowAI
         static async Task<bool> TestChunkFilter()
         {
             // Create a sequence with a simple pattern
-            var p = new FlowSequence<int>(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0 });
-            // Create a buffer to store the filtered values
-            var buf = new CyclicFlowBuffer<int>(10);
+            var seq = new FlowSequence<int>(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0 });
+            // Create a sink to store the filtered values
+            var snk = new CyclicFlowBuffer<int>(10);
             // Create a filter that removes the sequence '2, 3, 4'
             var flt = new FlowFilter<int>(
-                chunk => chunk.SequenceEqual(new[] { 2, 3, 4 }), 
-                chunkSize: 3, 
-                filterConsumer: buf
+                chunk => chunk.SequenceEqual(new[] { 2, 3, 4 }),
+                chunkSize: 3,
+                filterConsumer: snk
             );
             // Collect the filtered sequence
-            IProducerConsumerCollection<int> ret = await flt.PipeFlow(p, p.Flow()).Collect(10);
+            IProducerConsumerCollection<int> ret = await flt.PipeFlow(seq, seq.Flow()).Collect(10);
             // And make sure that our buffer got the removed droplets
             return ret.SequenceEqual(new[] { 1, 5, 6, 7, 8, 9, 0, 1, 5, 6 })
-                && buf.Contents.SequenceEqual(new[] { 2, 3, 4, 2, 3, 4 });
+                && snk.Contents.SequenceEqual(new[] { 2, 3, 4, 2, 3, 4 });
+        }
+        static async Task<bool> TestComplexPiping()
+        {
+            // Create a sequence with a simple pattern
+            var seq = new FlowSequence<int>(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0 });
+            // Create a sink to store the filtered values
+            var snk = new CyclicFlowBuffer<int>(10);
+            // Create a filter that removes the sequences '2, 3, 4' and '7, 8, 9'
+            var flt = new FlowFilter<int>(
+                chunk => chunk.SequenceEqual(new[] { 2, 3, 4 }) || chunk.SequenceEqual(new[] { 7, 8, 9 }),
+                chunkSize: 3,
+                filterConsumer: snk
+            );
+            // Use a reductor to merge flt and snk's flows
+            var pipe = new ReducingFlowOutputJunction<int>((a, b) => a + b, flt.PipeFlow(seq, seq.Flow()), snk.Flow());
+            IProducerConsumerCollection<int> ret = await pipe.Flow().Collect(10);
+
+            return true;
         }
     }
 }

@@ -1,4 +1,7 @@
-﻿using System.Collections.Async;
+﻿using FlowAI.Exceptions;
+using System;
+using System.Collections.Async;
+using System.Linq;
 using System.Threading.Tasks;
 
 
@@ -12,25 +15,31 @@ namespace FlowAI
         public int ChunkSize { get; protected set; } = 1;
         public int CurrentDroplet { get; protected set; } = 0;
         public int Current { get; protected set; } = 0;
-        public override bool IsFlowStarted() => base.IsFlowStarted() && Producers != null && Producers.Count > 0;
-        public SplittingFlowOutputJunction(int chunkSize = 1, params IFlowProducer<T>[] producers) : base(producers)
+        public override bool IsFlowStarted() => base.IsFlowStarted() && Flows != null && Flows.Count > 0;
+        public SplittingFlowOutputJunction(int chunkSize = 1, params IAsyncEnumerator<T>[] flows) : base(flows)
         {
             ChunkSize = chunkSize <= 0 ? 1 : chunkSize;
         }
 
         public override async Task<T> Drip()
         {
-            if (Current >= Producers.Count)
+            if (Current >= Flows.Count)
             {
                 Current = 0;
             }
-            T ret = await Producers.ToArray()[Current].Drip();
-            if (++CurrentDroplet == ChunkSize)
+
+            if(await Flows.ToArray()[Current].MoveNextAsync())
             {
-                CurrentDroplet = 0;
-                Current++;
+                T ret = Flows.ToArray()[Current].Current;
+                if (++CurrentDroplet == ChunkSize)
+                {
+                    CurrentDroplet = 0;
+                    Current++;
+                }
+                return ret;
             }
-            return ret;
+
+            await InterruptFlow(new FlowInterruptedException<T>(this, "Drip", fatal: false)); return default;
         }
     }
 }
