@@ -13,7 +13,7 @@ namespace FlowAI
     public class RandomFlowSequence<T> : FlowSequence<T>
     {
         private Random Rng { get; }
-        public IReadOnlyList<T> AllowedSymbols { get; protected set; }
+        public Func<Random, T> GetSymbol { get; protected set; }
         /// <summary>
         /// If true, the last sequence will be repeated instead of being generated anew when it's exhausted.
         /// </summary>
@@ -29,7 +29,7 @@ namespace FlowAI
             var tmp = new List<T>();
             for (int i = 0; i < length; i++)
             {
-                T symbol = AllowedSymbols[Rng.Next(AllowedSymbols.Count)];
+                T symbol = GetSymbol(Rng);
                 tmp.Add(symbol);
             }
 
@@ -39,13 +39,13 @@ namespace FlowAI
         /// <summary>
         /// A producer that continously emits a random sequence of fixed length containing a specific set of values that can be regenerated or kept when exhausted.
         /// </summary>
-        /// <param name="symbols">The set of symbols to use in the generated sequences. Repeating the same symbol can be used as a way to created weighted sequences.</param>
+        /// <param name="getSymbol">A function that returns a random symbol to be used by this producer.</param>
         /// <param name="sequenceLength">The length of each generated sequence.</param>
         /// <param name="repeatSameSequence">If true, reuse the last generated sequence.</param>
-        public RandomFlowSequence(IEnumerable<T> symbols, int sequenceLength, bool repeatSameSequence) : base(new T[] { })
+        public RandomFlowSequence(Func<Random, T> getSymbol, int sequenceLength, bool repeatSameSequence) : base(new T[] { })
         {
             Rng = new Random();
-            AllowedSymbols = new ReadOnlyCollection<T>(symbols.ToList());
+            GetSymbol = getSymbol;
             RepeatSameSequence = repeatSameSequence;
             Sequence = GenerateSequence(sequenceLength);
         }

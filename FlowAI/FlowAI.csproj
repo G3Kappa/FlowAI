@@ -66,7 +66,7 @@
     <Compile Include="Consumers\Plumbing\SequentialFlowInputJunction.cs" />
     <Compile Include="Hybrids\FlowHybridBase.cs" />
     <Compile Include="Hybrids\Machines\ChunkFlowMapper.cs" />
-    <Compile Include="Plumbing\AsyncExtensions.cs" />
+    <Compile Include="AsyncExtensions.cs" />
     <Compile Include="Consumers\Plumbing\SplittingFlowInputJunction.cs" />
     <Compile Include="Hybrids\Buffers\CyclicFlowBuffer.cs" />
     <Compile Include="Hybrids\Buffers\FlowBuffer.cs" />

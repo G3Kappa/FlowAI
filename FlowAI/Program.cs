@@ -93,9 +93,13 @@ namespace FlowAI
         static async Task<bool> TestSensors1()
         {
             // Create a sequence producer that continously emits a random pattern
-            var p = new RandomFlowSequence<char>(symbols: new char[] { 'h', 'l', 'o', 'e' }, sequenceLength: 5, repeatSameSequence: false);
+            var p = new RandomFlowSequence<char>(
+                getSymbol: (rng) => rng.Choose("ohleab".ToList()),
+                sequenceLength: 5, 
+                repeatSameSequence: false
+            );
             // Create a flow sensor that matches a possible pattern
-            var sensor = new FlowSensor<char>(new[] { 'h', 'e', 'l', 'l', 'o' }.ToList(), onValue: 'Y', offValue: 'N');
+            var sensor = new FlowSensor<char>("hello".ToList(), onValue: 'Y', offValue: 'N');
             // Consume from the sequence generator until the pattern is matched
             await sensor.ConsumeFlowUntil(p, p.Flow(), () => sensor.Value == sensor.OnValue).Collect();
             // Now the sensor contains the matched pattern ("hello") and is set to its OnValue
