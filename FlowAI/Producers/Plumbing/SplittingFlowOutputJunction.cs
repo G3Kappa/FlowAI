@@ -16,7 +16,7 @@ namespace FlowAI
         public int CurrentDroplet { get; protected set; } = 0;
         public int Current { get; protected set; } = 0;
         public override bool IsFlowStarted() => base.IsFlowStarted() && Flows != null && Flows.Count > 0;
-        public SplittingFlowOutputJunction(int chunkSize = 1, params IAsyncEnumerator<T>[] flows) : base(flows)
+        public SplittingFlowOutputJunction(int chunkSize = 1, params Func<IAsyncEnumerator<T>>[] flows) : base(flows)
         {
             ChunkSize = chunkSize <= 0 ? 1 : chunkSize;
         }
@@ -28,9 +28,10 @@ namespace FlowAI
                 Current = 0;
             }
 
-            if(await Flows.ToArray()[Current].MoveNextAsync())
+            var flows = Flows.Select(f => f()).ToArray();
+            if(await flows[Current].MoveNextAsync())
             {
-                T ret = Flows.ToArray()[Current].Current;
+                T ret = flows[Current].Current;
                 if (++CurrentDroplet == ChunkSize)
                 {
                     CurrentDroplet = 0;

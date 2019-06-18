@@ -37,7 +37,14 @@ namespace FlowAI
         }
         public override IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow)
         {
-            return InputBuffer.ConsumeFlow(producer, flow);
+            return new AsyncEnumerator<bool>(async yield =>
+            {
+                await flow.ForEachAsync(async t =>
+                {
+                    bool stored = await ConsumeDroplet(producer, t);
+                    await yield.ReturnAsync(stored);
+                });
+            });
         }
 
         public sealed override async Task<T> Drip()

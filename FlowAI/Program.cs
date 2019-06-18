@@ -136,7 +136,7 @@ namespace FlowAI
             var buf = new FlowBuffer<char>(capacity: 10);
             // Pipe the two sequences sequentially into the buffer with a splitting output junction
             // Here chunkSize: 5 means "take 5 droplets from A, then 5 from B, then 5 from A..."
-            var pipe = new SplittingFlowOutputJunction<char>(chunkSize: 5, seqA.Flow(), seqB.Flow());
+            var pipe = new SplittingFlowOutputJunction<char>(chunkSize: 5, () => seqA.Flow(), () => seqB.Flow());
             // Collect the results into buf by consuming from map through which the splitter is being piped
             await buf.ConsumeFlowUntilFull(map, map.PipeFlow(pipe, pipe.Flow())).Collect();
             // Now the buffer contains: "HELLOworld"
@@ -182,17 +182,17 @@ namespace FlowAI
         static async Task<bool> TestComplexPiping()
         {
             // Create a sequence with a simple pattern
-            var seq = new FlowSequence<int>(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0 });
+            var seq = new FlowSequence<int>(new[] { 1, 2, 3 });
             // Create a sink to store the filtered values
             var snk = new CyclicFlowBuffer<int>(10);
-            // Create a filter that removes the sequences '2, 3, 4' and '7, 8, 9'
+            // Create a filter that removes the value '2'
             var flt = new FlowFilter<int>(
-                chunk => chunk.SequenceEqual(new[] { 2, 3, 4 }) || chunk.SequenceEqual(new[] { 7, 8, 9 }),
-                chunkSize: 3,
+                chunk => chunk.SequenceEqual(new[] { 2 }),
+                chunkSize: 1,
                 filterConsumer: snk
             );
             // Use a reductor to merge flt and snk's flows
-            var pipe = new ReducingFlowOutputJunction<int>((a, b) => a + b, flt.PipeFlow(seq, seq.Flow()), snk.Flow());
+            var pipe = new ReducingFlowOutputJunction<int>((a, b) => a + b, () => flt.PipeFlow(seq, seq.Flow()), () => snk.Flow());
             IProducerConsumerCollection<int> ret = await pipe.Flow().Collect(10);
 
             return true;

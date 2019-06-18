@@ -26,9 +26,33 @@ namespace FlowAI
                     await ConsumeDroplet(producer, t);
                     if (IsFlowStarted()) // Don't deadlock if e.g. the output buffer is empty
                     {
-                        await yield.ReturnAsync(await Drip());
+                        var ret = await Drip();
+                        if((stop?.Invoke(ret) ?? false) || --maxDroplets == 0)
+                        {
+                            yield.Break();
+                        }
+                        await yield.ReturnAsync(ret);
                     }
                 });
+            });
+        }
+
+        /// <summary>
+        /// Pumps a flow with values that are then discarded in order to keep it running.
+        /// </summary>
+        public virtual IAsyncEnumerator<T> PumpFlow(T tmp = default)
+        {
+            // The default implementation is 1-1 dripping, while FlowMachines have a tailored and more efficient nInputs:nOutputs flowing implementation.
+            return new AsyncEnumerator<T>(async yield =>
+            {
+                if (await ConsumeDroplet(this, tmp) && IsFlowStarted())
+                {
+                    T ret = await Drip();
+                    if(!ret.Equals(tmp))
+                    {
+                        await yield.ReturnAsync(ret);
+                    }
+                }
             });
         }
     }

@@ -33,17 +33,15 @@ namespace FlowAI
                 Flow().Dispose();
 
                 LastError = reason ?? LastError;
-#if DEBUG
                 if(reason != null)
                 {
-                    throw reason; // lmao
-                }
-#else
-                if (reason?.Fatal ?? false)
-                {
-                    throw reason; // lol
-                }
+#if !DEBUG
+                    if(reason.Fatal) 
 #endif
+                    {
+                        throw reason;
+                    }
+                }
 
                 return restart || await StartFlow();
             }
