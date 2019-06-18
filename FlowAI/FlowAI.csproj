@@ -71,7 +71,7 @@
     <Compile Include="Hybrids\Buffers\CyclicFlowBuffer.cs" />
     <Compile Include="Hybrids\Buffers\FlowBuffer.cs" />
     <Compile Include="Hybrids\Machines\FlowMachine.cs" />
-    <Compile Include="Hybrids\Machines\FlowMapper.cs" />
+    <Compile Include="Hybrids\Machines\DropletFlowMapper.cs" />
     <Compile Include="Hybrids\Sensors\FlowSensor.cs" />
     <Compile Include="Producers\FlowConstant.cs" />
     <Compile Include="Consumers\Plumbing\FlowInputJunction.cs" />
