@@ -42,6 +42,9 @@ namespace FlowAI
         /// <summary>
         /// Called whenever a mapping operation takes place, right before the output buffer loads it.
         /// </summary>
-        protected virtual T[] OnInputTransformed(T[] input, T[] output) => output;
+        protected virtual T[] OnInputTransformed(T[] input, T[] output)
+        {
+            return output;
+        }
     }
 }

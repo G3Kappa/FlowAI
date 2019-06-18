@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -155,7 +156,7 @@ namespace FlowAI
 
             }, chunkSize: 3);
             // Collect the mapped sequence
-            System.Collections.Concurrent.IProducerConsumerCollection<int> ret = await map.PipeFlow(p, p.Flow()).Collect(12);
+            IProducerConsumerCollection<int> ret = await map.PipeFlow(p, p.Flow()).Collect(12);
             return ret.SequenceEqual(new[] { 1, 9, 9, 9, 8, 8, 9, 9, 9, 8, 8, 9 });
         }
         static async Task<bool> TestFilterAndChunkFilter()
@@ -171,7 +172,7 @@ namespace FlowAI
                 filterConsumer: buf
             );
             // Collect the filtered sequence
-            System.Collections.Concurrent.IProducerConsumerCollection<int> ret = await flt.PipeFlow(p, p.Flow()).Collect(10);
+            IProducerConsumerCollection<int> ret = await flt.PipeFlow(p, p.Flow()).Collect(10);
             // And make sure that our buffer got the removed droplets
             return ret.SequenceEqual(new[] { 1, 5, 6, 7, 8, 9, 0, 1, 5, 6 })
                 && buf.Contents.SequenceEqual(new[] { 2, 3, 4, 2, 3, 4 });

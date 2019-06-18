@@ -50,14 +50,18 @@ namespace FlowAI
             Sequence = GenerateSequence(sequenceLength);
         }
 
-        public override async Task<T> Drip() => await Task.Run(() => {
-            T ret = Sequence[Current++];
-            if (Current >= Sequence.Count)
+        public override async Task<T> Drip()
+        {
+            return await Task.Run(() =>
             {
-                Current = 0;
-                Sequence = GenerateSequence(Sequence.Count);
-            }
-            return ret;
-        });
+                T ret = Sequence[Current++];
+                if (Current >= Sequence.Count)
+                {
+                    Current = 0;
+                    Sequence = GenerateSequence(Sequence.Count);
+                }
+                return ret;
+            });
+        }
     }
 }

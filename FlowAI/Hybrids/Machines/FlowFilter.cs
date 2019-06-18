@@ -13,25 +13,28 @@ namespace FlowAI
         /// <summary>
         /// A filter maps a n-dimensional sequence to the empty sequence only when it matches
         /// </summary>
-        private static Func<T[], T[]> FilterToMap(Predicate<T[]> filter) => buf => filter(buf) ? new T[] { } : buf;
+        private static Func<T[], T[]> FilterToMap(Predicate<T[]> filter)
+        {
+            return buf => filter(buf) ? new T[] { } : buf;
+        }
 
         /// <summary>
-        /// If non-null, filtered droplets will be piped away to this consumer.
+        /// If non-null, filtered droplets will be piped to this consumer.
         /// </summary>
-        public IFlowConsumer<T> FilteredDropletsConsumer { get; set; }
+        public IFlowConsumer<T> FilterSink { get; set; }
 
         public FlowFilter(Predicate<T[]> filter, int chunkSize, IFlowConsumer<T> filterConsumer = null) : base(FilterToMap(filter), chunkSize)
         {
-            FilteredDropletsConsumer = filterConsumer;
+            FilterSink = filterConsumer;
         }
 
         protected override T[] OnInputTransformed(T[] input, T[] output)
         {
-            if (FilteredDropletsConsumer != null && output.Length == 0)
+            if (FilterSink != null && output.Length == 0)
             {
                 Task.Run(async () =>
                 {
-                    await FilteredDropletsConsumer.ConsumeFlow(InputBuffer, input.GetAsyncEnumerator()).Collect();
+                    await FilterSink.ConsumeFlow(InputBuffer, input.GetAsyncEnumerator()).Collect();
                 });
             }
 

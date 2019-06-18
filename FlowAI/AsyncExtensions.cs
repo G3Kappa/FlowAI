@@ -157,7 +157,10 @@ namespace FlowAI
             return ret;
         }
 
-        public static T Choose<T>(this Random rng, IList<T> from) => from[rng.Next(from.Count)];
+        public static T Choose<T>(this Random rng, IList<T> from)
+        {
+            return from[rng.Next(from.Count)];
+        }
     }
 
 

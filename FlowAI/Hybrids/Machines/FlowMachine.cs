@@ -35,14 +35,22 @@ namespace FlowAI
             await Update(InputBuffer, OutputBuffer);
             return ret;
         }
-        public override IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow) => InputBuffer.ConsumeFlow(producer, flow);
-        public sealed override async Task<T> Drip() => await OutputBuffer.Drip();
+        public override IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow)
+        {
+            return InputBuffer.ConsumeFlow(producer, flow);
+        }
+
+        public sealed override async Task<T> Drip()
+        {
+            return await OutputBuffer.Drip();
+        }
+
         public override IAsyncEnumerator<T> PipeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow, Predicate<T> stop = null, int maxDroplets = 0)
         {
             // The default implementation is 1-1 dripping, while FlowMachines have a tailored and more efficient nInputs:nOutputs flowing implementation.
 
             // ... Unless their input buffer has unlimited size, then they're 1-1
-            if(InputBuffer.Capacity == 0)
+            if (InputBuffer.Capacity == 0)
             {
                 return base.PipeFlow(producer, flow, stop, maxDroplets);
             }
