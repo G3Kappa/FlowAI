@@ -147,7 +147,7 @@ namespace FlowAI
             // Create a sequence with a simple pattern
             var p = new FlowSequence<int>(new[] { 1, 2, 3, 4, 5 });
             // Create a chunk mapper that replaces parts of the pattern
-            var map = new ChunkFlowMapper<int>(chunk =>
+            var map = new FlowMapper<int>(chunk =>
             {
                 // Notice how input and output sizes are decoupled
                 // i.e. You can map a chunk of size 1 to a chunk of size 3 and vice-versa

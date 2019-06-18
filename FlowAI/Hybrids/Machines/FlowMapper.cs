@@ -13,12 +13,12 @@ namespace FlowAI
     /// More powerful than a DropletFlowMapper, which only works on 1-1 streams.
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    public class ChunkFlowMapper<T> : FlowMachine<T>
+    public class FlowMapper<T> : FlowMachine<T>
     {
         public Func<T[], T[]> Map { get; }
         public int ChunkSize { get; protected set; }
 
-        public ChunkFlowMapper(Func<T[], T[]> mapping, int chunkSize) : base(chunkSize, 0)
+        public FlowMapper(Func<T[], T[]> mapping, int chunkSize) : base(chunkSize, 0)
         {
             Map = mapping;
             ChunkSize = chunkSize;

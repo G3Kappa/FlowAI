@@ -8,7 +8,7 @@ namespace FlowAI
     /// <summary>
     /// Filters sequences from a flow, optionally piping the filtered droplets to another consumer.
     /// </summary>
-    public class FlowFilter<T> : ChunkFlowMapper<T>
+    public class FlowFilter<T> : FlowMapper<T>
     {
         /// <summary>
         /// A filter maps a n-dimensional sequence to the empty sequence only when it matches
