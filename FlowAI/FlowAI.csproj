@@ -70,6 +70,7 @@
     <Compile Include="Consumers\Plumbing\SplittingFlowInputJunction.cs" />
     <Compile Include="Hybrids\Buffers\CyclicFlowBuffer.cs" />
     <Compile Include="Hybrids\Buffers\FlowBuffer.cs" />
+    <Compile Include="Hybrids\Machines\FlowFilter.cs" />
     <Compile Include="Hybrids\Machines\FlowMachine.cs" />
     <Compile Include="Hybrids\Machines\DropletFlowMapper.cs" />
     <Compile Include="Hybrids\Sensors\FlowSensor.cs" />

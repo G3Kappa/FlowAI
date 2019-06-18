@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Async;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -24,13 +25,23 @@ namespace FlowAI
 
         public override async Task Update(FlowBuffer<T> inBuf, FlowBuffer<T> outBuf)
         {
-            var oldContents = inBuf.Contents.ToList();
-            var mapped = Map(oldContents.ToArray());
-            if(!mapped.SequenceEqual(oldContents) || inBuf.Contents.Count == inBuf.Capacity)
+            T[] oldContents = inBuf.Contents.ToArray();
+            T[] mapped = Map(oldContents);
+            if (!mapped.SequenceEqual(oldContents))
             {
                 await inBuf.Flow(maxDroplets: inBuf.Capacity).Collect();
+                mapped = OnInputTransformed(oldContents, mapped);
                 await outBuf.ConsumeFlow(this, mapped.GetAsyncEnumerator()).Collect();
             }
+            else if (inBuf.Contents.Count == inBuf.Capacity)
+            {
+                await outBuf.ConsumeDroplet(inBuf, await inBuf.Drip());
+            }
         }
+
+        /// <summary>
+        /// Called whenever a mapping operation takes place, right before the output buffer loads it.
+        /// </summary>
+        protected virtual T[] OnInputTransformed(T[] input, T[] output) => output;
     }
 }

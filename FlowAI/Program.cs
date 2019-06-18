@@ -34,6 +34,7 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests:00}: Mapping squares w/ PipeFlow", TestMapWithPipe(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests:00}: Splitting output junctions ", TestSplittingOutputJunctions1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests:00}: Chunk mapping of a sequence", TestChunkMap(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests:00}: Filters and chunk filters  ", TestFilterAndChunkFilter(), passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -94,7 +95,7 @@ namespace FlowAI
         {
             // Create a sequence producer that continously emits a random pattern
             var p = new RandomFlowSequence<char>(
-                getSymbol: (rng) => rng.Choose("ohleab".ToList()),
+                getSymbol: (rng) => rng.Choose("ohlea".ToList()),
                 sequenceLength: 5, 
                 repeatSameSequence: false
             );
@@ -154,8 +155,26 @@ namespace FlowAI
 
             }, chunkSize: 3);
             // Collect the mapped sequence
-            var ret = await map.PipeFlow(p, p.Flow()).Collect(12);
+            System.Collections.Concurrent.IProducerConsumerCollection<int> ret = await map.PipeFlow(p, p.Flow()).Collect(12);
             return ret.SequenceEqual(new[] { 1, 9, 9, 9, 8, 8, 9, 9, 9, 8, 8, 9 });
+        }
+        static async Task<bool> TestFilterAndChunkFilter()
+        {
+            // Create a sequence with a simple pattern
+            var p = new FlowSequence<int>(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0 });
+            // Create a buffer to store the filtered values
+            var buf = new CyclicFlowBuffer<int>(10);
+            // Create a filter that removes the sequence '2, 3, 4'
+            var flt = new FlowFilter<int>(
+                chunk => chunk.SequenceEqual(new[] { 2, 3, 4 }), 
+                chunkSize: 3, 
+                filterConsumer: buf
+            );
+            // Collect the filtered sequence
+            System.Collections.Concurrent.IProducerConsumerCollection<int> ret = await flt.PipeFlow(p, p.Flow()).Collect(10);
+            // And make sure that our buffer got the removed droplets
+            return ret.SequenceEqual(new[] { 1, 5, 6, 7, 8, 9, 0, 1, 5, 6 })
+                && buf.Contents.SequenceEqual(new[] { 2, 3, 4, 2, 3, 4 });
         }
     }
 }

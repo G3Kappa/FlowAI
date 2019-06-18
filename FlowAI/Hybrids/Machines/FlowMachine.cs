@@ -22,7 +22,8 @@ namespace FlowAI
         }
 
         /// <summary>
-        /// Called whenever a droplet is pulled from the output buffer.
+        /// Called whenever a droplet is pushed into the input buffer.
+        /// Pushing into the output buffer will signal the start of a chunk of data.
         /// </summary>
         /// <param name="inBuf">The input buffer</param>
         /// <param name="outBuf">The output buffer</param>
@@ -30,15 +31,12 @@ namespace FlowAI
 
         public override async Task<bool> ConsumeDroplet(IFlowProducer<T> producer, T droplet)
         {
-            var ret = await InputBuffer.ConsumeDroplet(producer, droplet);
+            bool ret = await InputBuffer.ConsumeDroplet(producer, droplet);
             await Update(InputBuffer, OutputBuffer);
             return ret;
         }
         public override IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow) => InputBuffer.ConsumeFlow(producer, flow);
-        public sealed override async Task<T> Drip()
-        {
-            return await OutputBuffer.Drip();
-        }
+        public sealed override async Task<T> Drip() => await OutputBuffer.Drip();
         public override IAsyncEnumerator<T> PipeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow, Predicate<T> stop = null, int maxDroplets = 0)
         {
             // The default implementation is 1-1 dripping, while FlowMachines have a tailored and more efficient nInputs:nOutputs flowing implementation.
