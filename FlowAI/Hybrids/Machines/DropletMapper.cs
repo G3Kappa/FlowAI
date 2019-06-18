@@ -5,14 +5,15 @@ using System.Threading.Tasks;
 namespace FlowAI
 {
     /// <summary>
-    /// A machine that transforms droplets as it consumes them
+    /// A simple mapper that transforms droplets as it consumes them.
+    /// For anything more complex, consider using a FlowMapper.
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    public class DropletFlowMapper<T> : FlowMachine<T>
+    public class DropletMapper<T> : FlowMachine<T>
     {
         public Func<T, T> Map { get; }
 
-        public DropletFlowMapper(Func<T, T> mapping) : base(0, 0)
+        public DropletMapper(Func<T, T> mapping) : base(0, 0)
         {
             Map = mapping;
         }
