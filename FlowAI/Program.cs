@@ -16,8 +16,9 @@ namespace FlowAI
         {
             var stopwatch = new Stopwatch();
             stopwatch.Start();
+            Console.Write($"{name}: ");
             bool ret = await testToAwait;
-            Console.WriteLine($"{name}: {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(ret ? "PASS" : "FAIL" )})");
+            Console.WriteLine($"{stopwatch.Elapsed.TotalSeconds:0.000}s. ({(ret ? "PASS" : "FAIL" )})");
             stopwatch.Stop();
             return (passed_tests + (ret ? 1 : 0), total_tests + 1);
         }
@@ -28,14 +29,14 @@ namespace FlowAI
             var stopwatch = new Stopwatch();
             stopwatch.Start();
             int passed_tests = 0; int total_tests = 0;
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests:00}: Constant flow into buffer  ", TestConstToBuf(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests:00}: Basic input junctions      ", TestInputJunctions1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests:00}: Splitting input junctions  ", TestSplittingInputJunctions1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests:00}: Sensors (may last a bit)   ", TestSensors1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests:00}: Mapping squares w/ PipeFlow", TestMapWithPipe(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests:00}: Splitting output junctions ", TestSplittingOutputJunctions1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests:00}: Chunk mapping of a sequence", TestChunkMap(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests:00}: Filters and chunk filters  ", TestFilterAndChunkFilter(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Constant flow into buffer  ", TestConstToBuf(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Basic input junctions      ", TestInputJunctions1(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Splitting input junctions  ", TestSplittingInputJunctions1(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Sensors (may last a while) ", TestSensors1(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Mapping squares w/ PipeFlow", TestMapWithPipe(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Splitting output junctions ", TestSplittingOutputJunctions1(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Chunk mapping of a sequence", TestChunkMap(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Filters and chunk filters  ", TestFilterAndChunkFilter(), passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -101,19 +102,19 @@ namespace FlowAI
                 repeatSameSequence: false
             );
             // Create a flow sensor that matches a possible pattern
-            var sensor = new FlowSensor<char>("hello".ToList(), onValue: 'Y', offValue: 'N');
+            var sensor = new FlowSensor<char>("hell".ToList(), onValue: 'Y', offValue: 'N');
             // Consume from the sequence generator until the pattern is matched
             await sensor.ConsumeFlowUntil(p, p.Flow(), () => sensor.Value == sensor.OnValue).Collect();
             // Now the sensor contains the matched pattern ("hello") and is set to its OnValue
             return sensor.Value == sensor.OnValue 
-                && sensor.Contents.SequenceEqual("hello");
+                && sensor.Contents.SequenceEqual("hell");
         }
         static async Task<bool> TestMapWithPipe()
         {
             // Create a sequence producer that continously emits a pattern
             var p = new FlowSequence<int>(new[] { 1, 2, 3, 4, 5 });
             // Create a mapper that transforms the sequence into a sequence of squares
-            var map = new DropletFlowMapper<int>(i => i * i);
+            var map = new DropletMapper<int>(i => i * i);
             // Create a buffer to store the results
             var buf = new FlowBuffer<int>(5);
             // Collect the squared sequence into the buffer by having it consume from the map which is piped to the sequence.
@@ -129,7 +130,7 @@ namespace FlowAI
             var seqA = new FlowSequence<char>(seq: new char[] { 'h', 'e', 'l', 'l', 'o' });
             var seqB = new FlowSequence<char>(seq: new char[] { 'W', 'O', 'R', 'L', 'D' });
             // Create a mapper that inverts the casing of any character that flows into it
-            var map = new DropletFlowMapper<char>(c => Char.ToUpper(c) == c ? Char.ToLower(c) : Char.ToUpper(c));
+            var map = new DropletMapper<char>(c => Char.ToUpper(c) == c ? Char.ToLower(c) : Char.ToUpper(c));
             // Create a receiving buffer for the resulting sequence
             var buf = new FlowBuffer<char>(capacity: 10);
             // Pipe the two sequences sequentially into the buffer with a splitting output junction

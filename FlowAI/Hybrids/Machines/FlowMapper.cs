@@ -9,7 +9,8 @@ using System.Threading.Tasks;
 namespace FlowAI
 {
     /// <summary>
-    /// A machine that transforms chunks of droplets as it consumes them
+    /// A machine that transforms chunks of droplets as it consumes them.
+    /// More powerful than a DropletFlowMapper, which only works on 1-1 streams.
     /// </summary>
     /// <typeparam name="T"></typeparam>
     public class ChunkFlowMapper<T> : FlowMachine<T>
