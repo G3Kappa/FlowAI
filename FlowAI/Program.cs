@@ -39,7 +39,7 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowFilter                 ", TestFlowFilter(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowOutputJunction", TestSplittingOutputJunctions1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: ReducingFlowOutputJunction ", TestReducingOutputJunctions(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Fibonacci                  ", TestFibonacciScenario(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Fibonacci w/ Recursive Pipe", TestFibonacciScenario(), passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
