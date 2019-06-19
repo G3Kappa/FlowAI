@@ -247,7 +247,7 @@ namespace FlowAI
                 fibonacci
             );
             // Get the fib. machine flowing and keep piping its output into inPipe until outBuf is full
-            await inPipe.ConsumeFlowUntil(fibonacci, fibonacci.Flow(), () => outBuf.Contents.Count == outBuf.Capacity).Collect();
+            await inPipe.ConsumeFlowUntil(fibonacci, fibonacci.Flow(), () => outBuf.Full).Collect();
             // Now outBuf contains the fibonacci sequence starting from 1!
             return outBuf.Full
                 && outBuf.Contents.SequenceEqual(new[] { 1, 1, 2, 3, 5, 8, 13, 21, 34, 55 });
