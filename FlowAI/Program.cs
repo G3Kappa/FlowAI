@@ -1,4 +1,5 @@
 ﻿using FlowAI.Consumers.Plumbing;
+using FlowAI.Hybrids.Adapters;
 using FlowAI.Hybrids.Buffers;
 using FlowAI.Hybrids.Machines;
 using FlowAI.Hybrids.Sensors;
@@ -9,7 +10,9 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 
 
@@ -45,6 +48,7 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowOutputJunction", TestSplittingOutputJunctions1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: ReducingFlowOutputJunction ", TestReducingOutputJunctions(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Fibonacci w/ Recursive Pipe", TestFibonacciScenario(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowAdapter<FileStream,_>  ", TestStreamAdapters(), passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -263,6 +267,17 @@ namespace FlowAI
                 .Collect();                                             // Collect the results into res
             // Res contains the fibonacci sequence!
             return res.SequenceEqual(new[] { 1, 1, 2, 3, 5, 8, 13, 21, 34, 55 });
+        }
+        static async Task<bool> TestStreamAdapters()
+        {
+            // Create an adapter that parses FileStreams into char droplets
+            var adapter = new FileStreamFlowAdapter(
+                File.OpenRead(@"Tests\hello_world.txt"),
+                Encoding.UTF8
+            );
+            // That's it - just collect the flow and you'll read until the EOF
+            IProducerConsumerCollection<char> ret = await adapter.Flow().Collect();
+            return ret.SequenceEqual("Hello world!");
         }
     }
 }

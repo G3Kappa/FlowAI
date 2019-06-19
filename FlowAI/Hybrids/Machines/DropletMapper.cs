@@ -10,7 +10,7 @@ namespace FlowAI.Hybrids.Machines
     /// For anything more complex, consider using a FlowMapper.
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    public class DropletMapper<T> : FlowMachine<T>
+    public class DropletMapper<T> : FlowMachineBase<T>
     {
         public Func<T, T> Map { get; }
 

@@ -14,7 +14,7 @@ namespace FlowAI.Hybrids.Machines
     /// More powerful than a DropletFlowMapper, which only works on 1-1 streams.
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    public class FlowMapper<T> : FlowMachine<T>
+    public class FlowMapper<T> : FlowMachineBase<T>
     {
         public Func<T[], T[]> Map { get; }
         public int ChunkSize { get; protected set; }

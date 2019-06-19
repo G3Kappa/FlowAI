@@ -74,7 +74,7 @@
     <Compile Include="Hybrids\Buffers\CyclicFlowBuffer.cs" />
     <Compile Include="Hybrids\Buffers\FlowBuffer.cs" />
     <Compile Include="Hybrids\Machines\FlowFilter.cs" />
-    <Compile Include="Hybrids\Machines\FlowMachine.cs" />
+    <Compile Include="Hybrids\Machines\FlowMachineBase.cs" />
     <Compile Include="Hybrids\Machines\DropletMapper.cs" />
     <Compile Include="Hybrids\Sensors\FlowSensor.cs" />
     <Compile Include="Producers\FlowConstant.cs" />
@@ -94,6 +94,11 @@
   <ItemGroup>
     <None Include="App.config" />
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Tests\hello_world.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

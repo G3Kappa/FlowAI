@@ -50,7 +50,7 @@ namespace FlowAI.Producers
                     }
                 }
 
-                return restart || await StartFlow();
+                return restart && await StartFlow();
             }
             return false;
         }
@@ -65,14 +65,22 @@ namespace FlowAI.Producers
         public abstract Task<T> Drip();
         public virtual IAsyncEnumerator<T> Flow(Predicate<T> stop = null, int maxDroplets=0)
         {
+            return Flow_Internal(this, stop, maxDroplets);
+        }
+
+        internal static IAsyncEnumerator<T> Flow_Internal(FlowProducerBase<T> self, Predicate<T> stop = null, int maxDroplets = 0)
+        {
             return new AsyncEnumerator<T>(async yield =>
             {
-                while(IsFlowStarted)
+                while (self.IsFlowStarted)
                 {
-                    T ret = await Drip();
-                    await yield.ReturnAsync(ret);
+                    T ret = await self.Drip();
+                    if (self.IsOpen)
+                    {
+                        await yield.ReturnAsync(ret);
+                    }
 
-                    if (--maxDroplets == 0 || stop != null && stop(ret))
+                    if (!self.IsOpen || --maxDroplets == 0 || stop != null && stop(ret))
                     {
                         yield.Break();
                     }

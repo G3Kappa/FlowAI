@@ -12,12 +12,12 @@ namespace FlowAI.Hybrids.Machines
     /// A consumer-producer that manages an input and an output buffer, consuming from the input and producing from the output.
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    public abstract class FlowMachine<T> : FlowHybridBase<T>
+    public abstract class FlowMachineBase<T> : FlowHybridBase<T>
     {
         protected CyclicFlowBuffer<T> InputBuffer { get; }
         protected CyclicFlowBuffer<T> OutputBuffer { get; }
 
-        public FlowMachine(int nInputs, int nOutputs) : base()
+        public FlowMachineBase(int nInputs, int nOutputs) : base()
         {
             InputBuffer = new CyclicFlowBuffer<T>(nInputs);
             OutputBuffer = new CyclicFlowBuffer<T>(nOutputs);
@@ -65,12 +65,12 @@ namespace FlowAI.Hybrids.Machines
                 : new AsyncEnumerator<T>(async yield =>
                 {
                     bool hasNext = await flow.MoveNextAsync();
-                    while(hasNext)
+                    while (hasNext)
                     {
                         await ConsumeDroplet(producer, flow.Current);
                         hasNext = await flow.MoveNextAsync();
 
-                        if(OutputBuffer.Contents.Count > 0)
+                        if (OutputBuffer.Contents.Count > 0)
                         {
                             await Flow(stop: t => OutputBuffer.Empty || (stop?.Invoke(t) ?? false), maxDroplets: OutputBuffer.Capacity).ForEachAsync(async t =>
                             {
