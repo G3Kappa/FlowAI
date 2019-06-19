@@ -15,7 +15,7 @@ namespace FlowAI
         public int ChunkSize { get; protected set; } = 1;
         public int CurrentDroplet { get; protected set; } = 0;
         public int Current { get; protected set; } = 0;
-        public override bool IsFlowStarted() => base.IsFlowStarted() && Flows != null && Flows.Count > 0;
+        public override bool IsFlowStarted() => base.IsFlowStarted() && FlowStarters != null && FlowStarters.Count > 0;
         public SplittingFlowOutputJunction(int chunkSize = 1, params Func<IAsyncEnumerator<T>>[] flows) : base(flows)
         {
             ChunkSize = chunkSize <= 0 ? 1 : chunkSize;
@@ -23,12 +23,12 @@ namespace FlowAI
 
         public override async Task<T> Drip()
         {
-            if (Current >= Flows.Count)
+            if (Current >= FlowStarters.Count)
             {
                 Current = 0;
             }
 
-            var flows = Flows.Select(f => f()).ToArray();
+            var flows = GetFlows();
             if(await flows[Current].MoveNextAsync())
             {
                 T ret = flows[Current].Current;

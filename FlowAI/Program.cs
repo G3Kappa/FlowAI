@@ -194,8 +194,9 @@ namespace FlowAI
             // Use a reductor to merge flt and snk's flows
             var pipe = new ReducingFlowOutputJunction<int>((a, b) => a + b, () => flt.PipeFlow(seq, seq.Flow()), () => snk.Flow());
             IProducerConsumerCollection<int> ret = await pipe.Flow().Collect(10);
-
-            return true;
+            // Now the pipe is doing the following: pull 1 from seq; pull and filter 2 into snk; pull 3 from seq and 2 from snk and reduce them; repeat
+            return ret.SequenceEqual(new[] { 1, 5, 1, 5, 1, 5, 1, 5, 1, 5 })
+                && snk.Contents.Count == 0;
         }
     }
 }

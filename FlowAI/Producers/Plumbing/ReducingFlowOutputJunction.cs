@@ -14,7 +14,7 @@ namespace FlowAI
     {
         public Func<T, T, T> Reduce { get; set; }
 
-        public override bool IsFlowStarted() => base.IsFlowStarted() && Flows != null && Flows.Count > 0;
+        public override bool IsFlowStarted() => base.IsFlowStarted() && FlowStarters != null && FlowStarters.Count > 0;
         public ReducingFlowOutputJunction(Func<T, T, T> reduce, params Func<IAsyncEnumerator<T>>[] flows) : base(flows)
         {
             Reduce = reduce;
@@ -22,7 +22,7 @@ namespace FlowAI
 
         public override async Task<T> Drip()
         {
-            IAsyncEnumerator<T>[] flows = Flows.Select(f => f()).ToArray();
+            IAsyncEnumerator<T>[] flows = GetFlows();
             /*
                 TODO: This is skipping values in the latest test.
                 It might have to do with flows now being accessible by function call.
@@ -30,7 +30,7 @@ namespace FlowAI
             if(await flows[0].MoveNextAsync())
             {
                 T ret = flows[0].Current;
-                for (int i = 1; i < Flows.Count; i++)
+                for (int i = 1; i < FlowStarters.Count; i++)
                 {
                     if (await flows[i].MoveNextAsync())
                     {
