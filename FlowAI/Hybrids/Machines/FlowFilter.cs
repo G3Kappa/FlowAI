@@ -1,9 +1,10 @@
-﻿using System;
+﻿using FlowAI.Consumers;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace FlowAI
+namespace FlowAI.Hybrids.Machines
 {
     /// <summary>
     /// Filters sequences from a flow, optionally piping the filtered droplets to another consumer.

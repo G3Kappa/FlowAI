@@ -4,7 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Producers
 {
     public interface IFlowProducer<T>
     {
@@ -22,6 +22,6 @@ namespace FlowAI
         /// Check whether this producer is enabled.
         /// </summary>
         /// <returns>True if this producer can produce flow.</returns>
-        bool IsFlowStarted();
+        bool IsFlowStarted { get; }
     }
 }

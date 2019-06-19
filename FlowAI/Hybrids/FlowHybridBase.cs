@@ -1,9 +1,11 @@
-﻿using System;
+﻿using FlowAI.Consumers;
+using FlowAI.Producers;
+using System;
 using System.Collections.Async;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Hybrids
 {
     /// <summary>
     /// Base class for a flow component that produces and consumes droplets at the same time. 
@@ -24,9 +26,9 @@ namespace FlowAI
                 await flow.ForEachAsync(async t =>
                 {
                     await ConsumeDroplet(producer, t);
-                    if (IsFlowStarted()) // Don't deadlock if e.g. the output buffer is empty
+                    if (IsFlowStarted) // Don't deadlock if e.g. the output buffer is empty
                     {
-                        var ret = await Drip();
+                        T ret = await Drip();
                         if((stop?.Invoke(ret) ?? false) || --maxDroplets == 0)
                         {
                             yield.Break();

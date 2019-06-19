@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Producers.Plumbing
 {
     /// <summary>
     /// Merges the flow of a number of producers into a single Flow by exhausting each flow sequentially in the order they were provided.
@@ -13,7 +13,8 @@ namespace FlowAI
     public class SequentialFlowOutputJunction<T> : FlowOutputJunctionBase<T>
     {
         public int Current { get; protected set; } = 0;
-        public override bool IsFlowStarted() => base.IsFlowStarted() && FlowStarters != null && FlowStarters.Count > 0;
+        public override bool IsFlowStarted => base.IsFlowStarted && FlowStarters != null && FlowStarters.Count > 0;
+
         public SequentialFlowOutputJunction(params Func<IAsyncEnumerator<T>>[] flows) : base(flows)
         {
         }
@@ -25,8 +26,8 @@ namespace FlowAI
                 Current = 0;
             }
 
-            var flows = GetFlows();
-            bool flowExhausted = false;
+            bool flowExhausted;
+            IAsyncEnumerator<T>[] flows = GetFlows();
             while ((flowExhausted = !await flows[Current].MoveNextAsync()) && ++Current < FlowStarters.Count) ;
 
             if(!flowExhausted)

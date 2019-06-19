@@ -1,7 +1,7 @@
 ﻿using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Producers
 {
     /// <summary>
     /// A simple producer that continuously emits a constant.
@@ -14,6 +14,9 @@ namespace FlowAI
             Value = value;
         }
 
-        public override async Task<T> Drip() => await Task.Run(() => Value);
+        public override async Task<T> Drip()
+        {
+            return await Task.Run(() => Value);
+        }
     }
 }

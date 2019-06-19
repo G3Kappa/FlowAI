@@ -1,8 +1,9 @@
-﻿using System.Collections.Async;
+﻿using FlowAI.Producers;
+using System.Collections.Async;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Consumers
 {
     public interface IFlowConsumer<T>
     {

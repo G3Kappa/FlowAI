@@ -1,10 +1,12 @@
-﻿using System.Collections.Generic;
+﻿using FlowAI.Hybrids.Buffers;
+using FlowAI.Producers;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Hybrids.Sensors
 {
     /// <summary>
     /// A smart buffer that outputs a on/off value when its content match a predefined sequence.

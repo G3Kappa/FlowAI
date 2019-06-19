@@ -1,10 +1,12 @@
-﻿using System;
+﻿using FlowAI.Hybrids.Buffers;
+using FlowAI.Producers;
+using System;
 using System.Collections.Async;
 using System.Threading;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Hybrids.Machines
 {
     /// <summary>
     /// A consumer-producer that manages an input and an output buffer, consuming from the input and producing from the output.
@@ -57,28 +59,26 @@ namespace FlowAI
             // The default implementation is 1-1 dripping, while FlowMachines have a tailored and more efficient nInputs:nOutputs flowing implementation.
 
             // ... Unless their input buffer has unlimited size, then they're 1-1
-            if (InputBuffer.Capacity == 0)
-            {
-                return base.PipeFlow(producer, flow, stop, maxDroplets);
-            }
 
-            return new AsyncEnumerator<T>(async yield =>
-            {
-                bool hasNext = await flow.MoveNextAsync();
-                while(hasNext)
+            return InputBuffer.Capacity == 0
+                ? base.PipeFlow(producer, flow, stop, maxDroplets)
+                : new AsyncEnumerator<T>(async yield =>
                 {
-                    await ConsumeDroplet(producer, flow.Current);
-                    hasNext = await flow.MoveNextAsync();
-
-                    if(OutputBuffer.Contents.Count > 0)
+                    bool hasNext = await flow.MoveNextAsync();
+                    while(hasNext)
                     {
-                        await Flow(stop: t => OutputBuffer.Empty || (stop?.Invoke(t) ?? false), maxDroplets: OutputBuffer.Capacity).ForEachAsync(async t =>
+                        await ConsumeDroplet(producer, flow.Current);
+                        hasNext = await flow.MoveNextAsync();
+
+                        if(OutputBuffer.Contents.Count > 0)
                         {
-                            await yield.ReturnAsync(t);
-                        });
+                            await Flow(stop: t => OutputBuffer.Empty || (stop?.Invoke(t) ?? false), maxDroplets: OutputBuffer.Capacity).ForEachAsync(async t =>
+                            {
+                                await yield.ReturnAsync(t);
+                            });
+                        }
                     }
-                }
-            });
+                });
         }
     }
 }

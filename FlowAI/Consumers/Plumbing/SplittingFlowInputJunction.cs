@@ -1,7 +1,8 @@
-﻿using System.Threading.Tasks;
+﻿using FlowAI.Producers;
+using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Consumers.Plumbing
 {
     /// <summary>
     /// Like a regular junction, but droplets aren't copied and rather evenly distributed among each consumer.

@@ -1,7 +1,8 @@
-﻿using System.Threading.Tasks;
+﻿using FlowAI.Producers;
+using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Consumers.Plumbing
 {
     /// <summary>
     /// Like a regular junction, but droplets aren't copied and rather distributed exclusively to the first consumer until it is full, then to the second, and so on.
@@ -19,11 +20,7 @@ namespace FlowAI
                 Current = 0;
             }
             bool ret = await Consumers.ToArray()[Current].ConsumeDroplet(producer, droplet);
-            if (!ret && ++Current == Consumers.Count)
-            {
-                return false;
-            }
-            return true;
+            return ret || ++Current != Consumers.Count;
         }
     }
 }

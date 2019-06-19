@@ -1,7 +1,8 @@
-﻿using System.Threading.Tasks;
+﻿using FlowAI.Producers;
+using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Hybrids.Buffers
 {
     /// <summary>
     /// Like a regular buffer, but instead of getting full it will delete the oldest element, 

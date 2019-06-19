@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Producers.Sequences
 {
     /// <summary>
     /// A producer that continously emits a random sequence of fixed length containing a specific set of values that can be regenerated or kept when exhausted.

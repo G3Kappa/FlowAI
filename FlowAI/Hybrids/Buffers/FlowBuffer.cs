@@ -1,4 +1,5 @@
 ﻿using FlowAI.Exceptions;
+using FlowAI.Producers;
 using System.Collections.Async;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -7,7 +8,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Hybrids.Buffers
 {
 
     /// <summary>
@@ -17,7 +18,7 @@ namespace FlowAI
     {
         protected ConcurrentQueue<T> Queue { get; private set; }
         public IReadOnlyCollection<T> Contents => Queue;
-        public override bool IsFlowStarted() => base.IsFlowStarted() && Queue.Count > 0;
+        public override bool IsFlowStarted => base.IsFlowStarted && Queue.Count > 0;
 
         public int Capacity { get; }
 

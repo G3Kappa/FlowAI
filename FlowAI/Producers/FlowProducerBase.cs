@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Producers
 {
     public abstract class FlowProducerBase<T> : IFlowProducer<T>
     {
@@ -14,12 +14,19 @@ namespace FlowAI
         /// Called when this producer should start producing droplets.
         /// </summary>
         /// <returns>True if the faucet could be opened or was already open.</returns>
-        public virtual async Task<bool> StartFlow() => await Task.Run(() => IsOpen = true);
+        public virtual async Task<bool> StartFlow()
+        {
+            return await Task.Run(() => IsOpen = true);
+        }
+
         /// <summary>
         /// Called when this producer should stop producing droplets.
         /// </summary>
         /// <returns>True if the faucet could be closed or was already closed.</returns>
-        public virtual async Task<bool> StaunchFlow() => await Task.Run(() => !(IsOpen = false));
+        public virtual async Task<bool> StaunchFlow()
+        {
+            return await Task.Run(() => !(IsOpen = false));
+        }
 
         public FlowInterruptedException<T> LastError { get; private set; }
         /// <summary>
@@ -28,7 +35,7 @@ namespace FlowAI
         /// <param name="restart">If false, the flow must then be manually restarted to indicate that error handling took place.</param>
         public async Task<bool> InterruptFlow(FlowInterruptedException<T> reason = null, bool restart = false)
         {
-            if(IsFlowStarted() && await StaunchFlow())
+            if(IsFlowStarted&& await StaunchFlow())
             {
                 Flow().Dispose();
 
@@ -48,7 +55,7 @@ namespace FlowAI
             return false;
         }
 
-        public virtual bool IsFlowStarted() => IsOpen;
+        public virtual bool IsFlowStarted => IsOpen;
 
         public FlowProducerBase()
         {
@@ -60,7 +67,7 @@ namespace FlowAI
         {
             return new AsyncEnumerator<T>(async yield =>
             {
-                while(IsFlowStarted())
+                while(IsFlowStarted)
                 {
                     T ret = await Drip();
                     await yield.ReturnAsync(ret);

@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Producers.Plumbing
 {
     /// <summary>
     /// Merges the flow of a number of producers into a single Flow by alternating chunks of droplets from each producer.
@@ -15,7 +15,8 @@ namespace FlowAI
         public int ChunkSize { get; protected set; } = 1;
         public int CurrentDroplet { get; protected set; } = 0;
         public int Current { get; protected set; } = 0;
-        public override bool IsFlowStarted() => base.IsFlowStarted() && FlowStarters != null && FlowStarters.Count > 0;
+        public override bool IsFlowStarted => base.IsFlowStarted && FlowStarters != null && FlowStarters.Count > 0;
+
         public SplittingFlowOutputJunction(int chunkSize = 1, params Func<IAsyncEnumerator<T>>[] flows) : base(flows)
         {
             ChunkSize = chunkSize <= 0 ? 1 : chunkSize;
@@ -28,7 +29,7 @@ namespace FlowAI
                 Current = 0;
             }
 
-            var flows = GetFlows();
+            IAsyncEnumerator<T>[] flows = GetFlows();
             if(await flows[Current].MoveNextAsync())
             {
                 T ret = flows[Current].Current;

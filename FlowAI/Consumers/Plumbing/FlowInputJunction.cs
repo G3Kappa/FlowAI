@@ -1,9 +1,10 @@
-﻿using System.Collections.Async;
+﻿using FlowAI.Producers;
+using System.Collections.Async;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Consumers.Plumbing
 {
     /// <summary>
     /// Copies and redirects droplets from any flow that passes throguh the junction to a number of consumers in parallel.

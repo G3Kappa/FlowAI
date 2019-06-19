@@ -1,8 +1,9 @@
-﻿using System;
+﻿using FlowAI.Hybrids.Buffers;
+using System;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Hybrids.Machines
 {
     /// <summary>
     /// A simple mapper that transforms droplets as it consumes them.

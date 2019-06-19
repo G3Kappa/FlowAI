@@ -1,4 +1,5 @@
-﻿using System;
+﻿using FlowAI.Hybrids.Buffers;
+using System;
 using System.Collections.Async;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -6,7 +7,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Hybrids.Machines
 {
     /// <summary>
     /// A machine that transforms chunks of droplets as it consumes them.

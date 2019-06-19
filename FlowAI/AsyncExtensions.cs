@@ -1,4 +1,6 @@
-﻿using System;
+﻿using FlowAI.Consumers;
+using FlowAI.Producers;
+using System;
 using System.Collections.Async;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -42,7 +44,7 @@ namespace FlowAI
         {
             return new AsyncEnumerator<bool>(async yield =>
             {
-                if (producer.IsFlowStarted() && producer is FlowProducerBase<T> prodImpl)
+                if (producer.IsFlowStarted&& producer is FlowProducerBase<T> prodImpl)
                 {
                     await c.ConsumeFlow(producer, flow).UntilAsync(async b =>
                     {
@@ -62,7 +64,7 @@ namespace FlowAI
         {
             return new AsyncEnumerator<bool>(async yield =>
             {
-                if (producer.IsFlowStarted() && producer is FlowProducerBase<T> prodImpl)
+                if (producer.IsFlowStarted&& producer is FlowProducerBase<T> prodImpl)
                 {
                     await c.ConsumeFlow(producer, new AsyncEnumerator<T>(async innerYield =>
                     {
@@ -93,7 +95,7 @@ namespace FlowAI
         {
             return new AsyncEnumerator<bool>(async yield =>
             {
-                if (producer.IsFlowStarted() && producer is FlowProducerBase<T> prodImpl)
+                if (producer.IsFlowStarted&& producer is FlowProducerBase<T> prodImpl)
                 {
                     await c.ConsumeFlow(producer, new AsyncEnumerator<T>(async innerYield =>
                     {

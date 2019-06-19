@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Producers.Plumbing
 {
     /// <summary>
     /// Merges the flow of a number of producers into a single Flow by applying a reduction function over one droplet from all producers at a time.
@@ -14,7 +14,7 @@ namespace FlowAI
     {
         public Func<T, T, T> Reduce { get; set; }
 
-        public override bool IsFlowStarted() => base.IsFlowStarted() && FlowStarters != null && FlowStarters.Count > 0;
+        public override bool IsFlowStarted => base.IsFlowStarted && FlowStarters != null && FlowStarters.Count > 0;
         public ReducingFlowOutputJunction(Func<T, T, T> reduce, params Func<IAsyncEnumerator<T>>[] flows) : base(flows)
         {
             Reduce = reduce;

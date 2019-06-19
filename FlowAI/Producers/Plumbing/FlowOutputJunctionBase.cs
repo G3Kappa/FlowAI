@@ -4,7 +4,7 @@ using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace FlowAI
+namespace FlowAI.Producers.Plumbing
 {
     /// <summary>
     /// Abstract class for an output junction, which can't offer an equivalent base implementation to a FlowInputJunction.
@@ -25,14 +25,8 @@ namespace FlowAI
             int i = 0; var ret = new IAsyncEnumerator<T>[FlowStarters.Count];
             foreach (IAsyncEnumerator<T> flow in OpenFlows)
             {
-                if(flow is AsyncEnumerator<T> inst && inst.IsEnumerationComplete)
-                {
-                    ret[i] = FlowStarters.ElementAt(i)();
-                }
-                else
-                {
-                    ret[i] = OpenFlows.ElementAt(i);
-                }
+                ret[i] = flow is AsyncEnumerator<T> inst && inst.IsEnumerationComplete 
+                    ? FlowStarters.ElementAt(i)() : OpenFlows.ElementAt(i);
                 i++;
             }
             return ret;

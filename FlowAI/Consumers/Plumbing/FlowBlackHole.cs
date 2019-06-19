@@ -1,9 +1,10 @@
-﻿using System.Collections.Async;
+﻿using FlowAI.Producers;
+using System.Collections.Async;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
 
 
-namespace FlowAI
+namespace FlowAI.Consumers.Plumbing
 {
     /// <summary>
     /// Consumes everything while doing literally nothing and is always full. Perfect as a sink for data you don't care about.
