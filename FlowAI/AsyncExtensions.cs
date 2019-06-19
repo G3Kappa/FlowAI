@@ -133,6 +133,22 @@ namespace FlowAI
         }
 
         /// <summary>
+        /// Appends a second enumerator at the end of the current enumerator, then returns the new enumerator.
+        /// The current enumerator will always run to completion before the appended enumerator can start.
+        /// </summary>
+        public static IAsyncEnumerator<TResult> Redirect<TSource, TResult>(this IAsyncEnumerator<TSource> e, IAsyncEnumerator<TResult> res)
+        {
+            return new AsyncEnumerator<TResult>(async yield =>
+            {
+                while (await e.MoveNextAsync()) ;
+                while (await res.MoveNextAsync())
+                {
+                    await yield.ReturnAsync(res.Current);
+                }
+            });
+        }
+
+        /// <summary>
         /// Replaces all occurrences of 'needle' with 'replacement'
         /// </summary>
         /// <typeparam name="T"></typeparam>

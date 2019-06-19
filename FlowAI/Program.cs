@@ -235,8 +235,6 @@ namespace FlowAI
                 }
                 return buf;
             }, chunkSize: 2);
-            // Seed the fibonacci machine with initial state: { 0, 1 }
-            await fibonacci.ConsumeFlow(fibonacci, new[] { 0, 1 }.GetAsyncEnumerator()).Collect();
             // Create a complex junction that pipes every droplet back to fibonacci, which is the source, 
             // and to a splitter that then pipes 50% of those droplets to outBuf and discards the rest.
             var inPipe = new FlowInputJunction<int>(
@@ -247,10 +245,19 @@ namespace FlowAI
                 fibonacci
             );
             // Get the fib. machine flowing and keep piping its output into inPipe until outBuf is full
-            await inPipe.ConsumeFlowUntil(fibonacci, fibonacci.Flow(), () => outBuf.Full).Collect();
-            // Now outBuf contains the fibonacci sequence starting from 1!
-            return outBuf.Full
-                && outBuf.Contents.SequenceEqual(new[] { 1, 1, 2, 3, 5, 8, 13, 21, 34, 55 });
+            // Once outBuf is full, redirect the Flow to outBuf's own Flow, and collect that.
+            IProducerConsumerCollection<int> res = 
+                await inPipe.ConsumeFlowUntil(                          // Let inPipe consume droplets until stop() returns true
+                    fibonacci,                                          // The droplets are being consumed from the 'fibonacci' object
+                    fibonacci.KickstartFlow(                            // Seed the fibonacci machine with initial state: { 0, 1 }
+                        fibonacci, new[] { 0, 1 }.GetAsyncEnumerator()  // And then start using the machine's own flow
+                    ), 
+                    stop: () => outBuf.Full                             // Finally, stop when outBuf has reached max. capacity
+                )                                                       // Once inPipe.ConsumeFlow has finished, drop its results and start piping from outBuf
+                .Redirect(outBuf.Flow())                                // (ConsumeFlow returns booleans similar in function to IEnumerator.MoveNext(), but we don't need them)
+                .Collect();                                             // Collect the results into res
+            // Res contains the fibonacci sequence!
+            return res.SequenceEqual(new[] { 1, 1, 2, 3, 5, 8, 13, 21, 34, 55 });
         }
     }
 }

@@ -14,7 +14,7 @@ namespace FlowAI
         public abstract IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow);
 
         /// <summary>
-        /// Pipes an input flow into this component, then returns the output flow.
+        /// Pipes an input flow into this component, then returns the piped output flow.
         /// </summary>
         public virtual IAsyncEnumerator<T> PipeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow, Predicate<T> stop = null, int maxDroplets = 0)
         {
@@ -33,6 +33,25 @@ namespace FlowAI
                         }
                         await yield.ReturnAsync(ret);
                     }
+                });
+            });
+        }
+
+        /// <summary>
+        /// Pipes an input flow into this component until it runs dry, then returns the output flow.
+        /// </summary>
+        public IAsyncEnumerator<T> KickstartFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow, Predicate<T> pipeStop = null, int pipeMaxDroplets = 0, Predicate<T> stop = null, int maxDroplets = 0)
+        {
+            return new AsyncEnumerator<T>(async yield =>
+            {
+                await PipeFlow(producer, flow, pipeStop, pipeMaxDroplets).ForEachAsync(async t =>
+                {
+                    await yield.ReturnAsync(t);
+                });
+
+                await Flow(stop, maxDroplets).ForEachAsync(async t =>
+                {
+                    await yield.ReturnAsync(t);
                 });
             });
         }
