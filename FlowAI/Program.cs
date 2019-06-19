@@ -29,15 +29,16 @@ namespace FlowAI
             var stopwatch = new Stopwatch();
             stopwatch.Start();
             int passed_tests = 0; int total_tests = 0;
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowConstant into buffer   ", TestConstToBuf(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Basic input junctions      ", TestInputJunctions1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Splitting input junctions  ", TestSplittingInputJunctions1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Sensors (may last a while) ", TestSensors1(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowConstant -> FlowBuffer ", TestConstToBuf(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowInputJunction          ", TestInputJunctions1(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowInputJunction ", TestSplittingInputJunctions1(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SequentialFlowInputJunction", TestSequentialInputJunctions1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: DropletMapper w/ PipeFlow()", TestMapWithPipe(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Splitting output junctions ", TestSplittingOutputJunctions1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowMapper on a sequence   ", TestChunkMap(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowFilter on a sequence   ", TestChunkFilter(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Complex piping w/ reductor ", TestComplexPiping(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowSensor (takes a while) ", TestSensors1(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowMapper                 ", TestFlowMapper(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowFilter                 ", TestFlowFilter(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowOutputJunction", TestSplittingOutputJunctions1(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: ReducingFlowOutputJunction ", TestReducingOutputJunctions(), passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -94,6 +95,23 @@ namespace FlowAI
                 && !bufA.Contents.SequenceEqual(new[] { 1, 2, 3, 4, 5, 1, 2, 3, 4, 5 })
                 && !bufB.Contents.SequenceEqual(new[] { 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5 });
         }
+        static async Task<bool> TestSequentialInputJunctions1()
+        {
+            // Create a sequence producer that continously emits a pattern
+            var p = new FlowSequence<int>(new[] { 1, 2, 3, 4, 5 });
+            // Create two buffers with different sizes
+            var bufA = new FlowBuffer<int>(capacity: 3);
+            var bufB = new FlowBuffer<int>(capacity: 7);
+            // Create a splitter junction that fills bufA and then bufB
+            var pipe = new SequentialFlowInputJunction<int>(bufA, bufB);
+            // Fill both buffers from the constant through the splitter
+            await pipe.ConsumeFlowUntilFull(p, p.Flow()).Collect();
+            // Now check that bufB got filled only after bufA was already full
+            return bufA.Contents.Count == bufA.Capacity
+                && bufB.Contents.Count == bufB.Capacity
+                && bufA.Contents.SequenceEqual(new[] { 1, 2, 3 })
+                && bufB.Contents.SequenceEqual(new[] { 4, 5, 1, 2, 3, 4, 5 });
+        }
         static async Task<bool> TestSensors1()
         {
             // Create a sequence producer that continously emits a random pattern
@@ -143,7 +161,7 @@ namespace FlowAI
             return buf.Contents.Count == buf.Capacity
                 && buf.Contents.SequenceEqual("HELLOworld");
         }
-        static async Task<bool> TestChunkMap()
+        static async Task<bool> TestFlowMapper()
         {
             // Create a sequence with a simple pattern
             var p = new FlowSequence<int>(new[] { 1, 2, 3, 4, 5 });
@@ -161,7 +179,7 @@ namespace FlowAI
             IProducerConsumerCollection<int> ret = await map.PipeFlow(p, p.Flow()).Collect(12);
             return ret.SequenceEqual(new[] { 1, 9, 9, 9, 8, 8, 9, 9, 9, 8, 8, 9 });
         }
-        static async Task<bool> TestChunkFilter()
+        static async Task<bool> TestFlowFilter()
         {
             // Create a sequence with a simple pattern
             var seq = new FlowSequence<int>(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0 });
@@ -179,7 +197,7 @@ namespace FlowAI
             return ret.SequenceEqual(new[] { 1, 5, 6, 7, 8, 9, 0, 1, 5, 6 })
                 && snk.Contents.SequenceEqual(new[] { 2, 3, 4, 2, 3, 4 });
         }
-        static async Task<bool> TestComplexPiping()
+        static async Task<bool> TestReducingOutputJunctions()
         {
             // Create a sequence with a simple pattern
             var seq = new FlowSequence<int>(new[] { 1, 2, 3 });
@@ -192,9 +210,14 @@ namespace FlowAI
                 filterConsumer: snk
             );
             // Use a reductor to merge flt and snk's flows
-            var pipe = new ReducingFlowOutputJunction<int>((a, b) => a + b, () => flt.PipeFlow(seq, seq.Flow()), () => snk.Flow());
+            var pipe = new ReducingFlowOutputJunction<int>(
+                reduce: (a, b) => a + b, 
+                () => flt.PipeFlow(seq, seq.Flow()), 
+                () => snk.Flow()
+             );
             IProducerConsumerCollection<int> ret = await pipe.Flow().Collect(10);
-            // Now the pipe is doing the following: pull 1 from seq; pull and filter 2 into snk; pull 3 from seq and 2 from snk and reduce them; repeat
+            // Now the pipe is doing the following on repeat: 
+            // pull 1 from seq; pull 2 from seq, filter it into snk; pull 3 from seq and 2 from snk and reduce them
             return ret.SequenceEqual(new[] { 1, 5, 1, 5, 1, 5, 1, 5, 1, 5 })
                 && snk.Contents.Count == 0;
         }

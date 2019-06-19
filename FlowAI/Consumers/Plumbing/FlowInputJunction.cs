@@ -13,7 +13,7 @@ namespace FlowAI
         public IProducerConsumerCollection<IFlowConsumer<T>> Consumers { get; }
         public FlowInputJunction(params IFlowConsumer<T>[] consumers)
         {
-            Consumers = new ConcurrentBag<IFlowConsumer<T>>(consumers);
+            Consumers = new ConcurrentQueue<IFlowConsumer<T>>(consumers);
         }
 
         public virtual async Task<bool> ConsumeDroplet(IFlowProducer<T> producer, T droplet)

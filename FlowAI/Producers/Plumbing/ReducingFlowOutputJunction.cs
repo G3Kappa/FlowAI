@@ -23,10 +23,6 @@ namespace FlowAI
         public override async Task<T> Drip()
         {
             IAsyncEnumerator<T>[] flows = GetFlows();
-            /*
-                TODO: This is skipping values in the latest test.
-                It might have to do with flows now being accessible by function call.
-             */
             if(await flows[0].MoveNextAsync())
             {
                 T ret = flows[0].Current;
