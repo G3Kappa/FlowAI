@@ -25,7 +25,6 @@ namespace FlowAI.Hybrids.Buffers
         public bool Empty => Contents.Count == 0;
         public bool Full => Contents.Count == Capacity;
 
-
         public FlowBuffer(int capacity = 0) : base()
         {
             Capacity = capacity > 0 ? capacity : 0;

@@ -70,9 +70,15 @@ namespace FlowAI.Hybrids.Machines
                         await ConsumeDroplet(producer, flow.Current);
                         hasNext = await flow.MoveNextAsync();
 
+                        if (!hasNext)
+                        {
+                            await OutputBuffer.ConsumeFlow(InputBuffer, InputBuffer.Flow()).Collect();
+                        }
+
                         if (OutputBuffer.Contents.Count > 0)
                         {
-                            await Flow(stop: t => OutputBuffer.Empty || (stop?.Invoke(t) ?? false), maxDroplets: OutputBuffer.Capacity).ForEachAsync(async t =>
+                            await Flow(stop: t => OutputBuffer.Empty || (stop?.Invoke(t) ?? false), maxDroplets: OutputBuffer.Capacity)
+                            .ForEachAsync(async t =>
                             {
                                 await yield.ReturnAsync(t);
                             });

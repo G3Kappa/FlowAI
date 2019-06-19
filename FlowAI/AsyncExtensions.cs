@@ -13,24 +13,24 @@ namespace FlowAI
 {
     public static class AsyncExtensions
     {
-        public static async Task UntilAsync<T>(this IAsyncEnumerator<T> e, Func<T, Task<bool>> until, Action then)
+        public static async Task UntilAsync<T>(this IAsyncEnumerator<T> e, Func<T, Task<bool>> until, AsyncEnumerator<T>.Yield yield = null)
         {
             await e.ForEachAsync(async t =>
             {
                 if (!await until(t))
                 {
-                    then();
+                    if (yield != null) yield.Break();
                     e.Dispose();
                 }
             });
         }
-        public static async Task UntilAsync<T>(this IAsyncEnumerator<T> e, Func<T, bool> until, Action then)
+        public static async Task UntilAsync<T>(this IAsyncEnumerator<T> e, Func<T, bool> until, AsyncEnumerator<T>.Yield yield = null)
         {
             await e.ForEachAsync(t =>
             {
                 if (!until(t))
                 {
-                    then();
+                    if (yield != null) yield.Break();
                     e.Dispose();
                 }
             });
@@ -50,8 +50,7 @@ namespace FlowAI
                     {
                         await yield.ReturnAsync(b);
                         return b;
-                    }, async () => await prodImpl.StaunchFlow());
-                    await prodImpl.StartFlow();
+                    }, yield);
                 }
             });
         }
@@ -80,8 +79,7 @@ namespace FlowAI
                     {
                         await yield.ReturnAsync(b);
                         return b;
-                    }, async () => await prodImpl.StaunchFlow());
-                    await prodImpl.StartFlow();
+                    }, yield);
                 }
             });
         }
@@ -111,8 +109,7 @@ namespace FlowAI
                     {
                         await yield.ReturnAsync(b);
                         return b;
-                    }, async () => await prodImpl.StaunchFlow());
-                    await prodImpl.StartFlow();
+                    }, yield);
                 }
             });
         }
@@ -135,7 +132,7 @@ namespace FlowAI
         }
 
         /// <summary>
-        /// Appends a second enumerator at the end of the current enumerator, then returns the new enumerator.
+        /// Appends a second enumerator at the end of the current enumerator, then returns the second enumerator.
         /// The current enumerator will always run to completion before the appended enumerator can start.
         /// </summary>
         public static IAsyncEnumerator<TResult> Redirect<TSource, TResult>(this IAsyncEnumerator<TSource> e, IAsyncEnumerator<TResult> res)
@@ -146,6 +143,29 @@ namespace FlowAI
                 while (await res.MoveNextAsync())
                 {
                     await yield.ReturnAsync(res.Current);
+                }
+            });
+        }
+
+        /// <summary>
+        /// Appends a second enumerator at the end of the current enumerator, then returns the combined enumerator.
+        /// The current enumerator will always run to completion before the appended enumerator can start.
+        /// </summary>
+        public static IAsyncEnumerator<T> ContinueWith<T>(this IAsyncEnumerator<T> e, IAsyncEnumerator<T> res, Func<bool> condition = null)
+        {
+            return new AsyncEnumerator<T>(async yield =>
+            {
+                while (await e.MoveNextAsync())
+                {
+                    await yield.ReturnAsync(e.Current);
+                }
+
+                if(condition?.Invoke() ?? false)
+                {
+                    while (await res.MoveNextAsync())
+                    {
+                        await yield.ReturnAsync(res.Current);
+                    }
                 }
             });
         }

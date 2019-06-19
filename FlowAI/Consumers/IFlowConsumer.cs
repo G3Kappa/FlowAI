@@ -18,5 +18,6 @@ namespace FlowAI.Consumers
         /// <param name="flow">A sequence of droplets to consume.</param>
         /// <returns>Whether each droplet was consumed.</returns>
         IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow);
+
     }
 }

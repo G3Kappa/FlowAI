@@ -48,7 +48,8 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowOutputJunction", TestSplittingOutputJunctions1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: ReducingFlowOutputJunction ", TestReducingOutputJunctions(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Fibonacci w/ Recursive Pipe", TestFibonacciScenario(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowAdapter<FileStream,_>  ", TestStreamAdapters(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowAdapter<FileStream,_>  ", TestStreamAdapters1(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FileStream str replacements", TestStreamAdapters2(), passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -268,7 +269,7 @@ namespace FlowAI
             // Res contains the fibonacci sequence!
             return res.SequenceEqual(new[] { 1, 1, 2, 3, 5, 8, 13, 21, 34, 55 });
         }
-        static async Task<bool> TestStreamAdapters()
+        static async Task<bool> TestStreamAdapters1()
         {
             // Create an adapter that parses FileStreams into char droplets
             var adapter = new FileStreamFlowAdapter(
@@ -278,6 +279,20 @@ namespace FlowAI
             // That's it - just collect the flow and you'll read until the EOF
             IProducerConsumerCollection<char> ret = await adapter.Flow().Collect();
             return ret.SequenceEqual("Hello world!");
+        }
+        static async Task<bool> TestStreamAdapters2()
+        {
+            var adapter = new FileStreamFlowAdapter(
+                File.OpenRead(@"Tests\hello_world.txt"),
+                Encoding.UTF8
+            );
+            var mapper = new FlowMapper<char>(buf =>
+            {
+                return new string(buf).Replace("world", "my dudes").ToCharArray();
+            }, chunkSize: 32);
+
+            IProducerConsumerCollection<char> ret = await mapper.PipeFlow(adapter, adapter.Flow()).Collect();
+            return ret.SequenceEqual("Hello my dudes!");
         }
     }
 }
