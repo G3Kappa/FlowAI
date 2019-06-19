@@ -36,24 +36,5 @@ namespace FlowAI
                 });
             });
         }
-
-        /// <summary>
-        /// Pumps a flow with values that are then discarded in order to keep it running.
-        /// </summary>
-        public virtual IAsyncEnumerator<T> PumpFlow(T tmp = default)
-        {
-            // The default implementation is 1-1 dripping, while FlowMachines have a tailored and more efficient nInputs:nOutputs flowing implementation.
-            return new AsyncEnumerator<T>(async yield =>
-            {
-                if (await ConsumeDroplet(this, tmp) && IsFlowStarted())
-                {
-                    T ret = await Drip();
-                    if(!ret.Equals(tmp))
-                    {
-                        await yield.ReturnAsync(ret);
-                    }
-                }
-            });
-        }
     }
 }

@@ -39,6 +39,7 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowFilter                 ", TestFlowFilter(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowOutputJunction", TestSplittingOutputJunctions1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: ReducingFlowOutputJunction ", TestReducingOutputJunctions(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Fibonacci                  ", TestFibonacciScenario(), passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -211,15 +212,45 @@ namespace FlowAI
             );
             // Use a reductor to merge flt and snk's flows
             var pipe = new ReducingFlowOutputJunction<int>(
-                reduce: (a, b) => a + b, 
-                () => flt.PipeFlow(seq, seq.Flow()), 
+                reduce: (a, b) => a + b,
+                () => flt.PipeFlow(seq, seq.Flow()),
                 () => snk.Flow()
-             );
+            );
             IProducerConsumerCollection<int> ret = await pipe.Flow().Collect(10);
             // Now the pipe is doing the following on repeat: 
             // pull 1 from seq; pull 2 from seq, filter it into snk; pull 3 from seq and 2 from snk and reduce them
             return ret.SequenceEqual(new[] { 1, 5, 1, 5, 1, 5, 1, 5, 1, 5 })
                 && snk.Contents.Count == 0;
+        }
+        static async Task<bool> TestFibonacciScenario()
+        {
+            // Create a buffer to store the fibonacci sequence
+            var outBuf = new FlowBuffer<int>(10);
+            // Create a machine that sums and returns the contents of its input buffer
+            var fibonacci = new FlowMapper<int>(buf =>
+            {
+                if(buf.Length == 2) // eg. [ 1, 2 ]
+                {
+                    return new[] { buf[1], buf[0] + buf[1] }; // eg. [ 2, 3 ]
+                }
+                return buf;
+            }, chunkSize: 2);
+            // Seed the fibonacci machine with initial state: { 0, 1 }
+            await fibonacci.ConsumeFlow(fibonacci, new[] { 0, 1 }.GetAsyncEnumerator()).Collect();
+            // Create a complex junction that pipes every droplet back to fibonacci, which is the source, 
+            // and to a splitter that then pipes 50% of those droplets to outBuf and discards the rest.
+            var inPipe = new FlowInputJunction<int>(
+                new SplittingFlowInputJunction<int>(  // This is because the fib. machine returns a stream of the form:
+                    outBuf,                           // (1, 1), (1, 2), (2, 3), (3, 5), (5, 8), (8, 13) ...
+                    new FlowBlackHole<int>()          // And we only want the first number for each pair
+                ),                                    // 1, 1, 2, 3, 5, 8, 13: That's fibonacci's sequence!
+                fibonacci
+            );
+            // Get the fib. machine flowing and keep piping its output into inPipe until outBuf is full
+            await inPipe.ConsumeFlowUntil(fibonacci, fibonacci.Flow(), () => outBuf.Contents.Count == outBuf.Capacity).Collect();
+            // Now outBuf contains the fibonacci sequence starting from 1!
+            return outBuf.Contents.Count == outBuf.Capacity
+                && outBuf.Contents.SequenceEqual(new[] { 1, 1, 2, 3, 5, 8, 13, 21, 34, 55 });
         }
     }
 }
