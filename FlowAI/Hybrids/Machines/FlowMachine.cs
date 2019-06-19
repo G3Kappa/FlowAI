@@ -72,7 +72,7 @@ namespace FlowAI
 
                     if(OutputBuffer.Contents.Count > 0)
                     {
-                        await Flow(stop: t => OutputBuffer.Contents.Count == 0 || (stop?.Invoke(t) ?? false), maxDroplets: OutputBuffer.Capacity).ForEachAsync(async t =>
+                        await Flow(stop: t => OutputBuffer.Empty || (stop?.Invoke(t) ?? false), maxDroplets: OutputBuffer.Capacity).ForEachAsync(async t =>
                         {
                             await yield.ReturnAsync(t);
                         });

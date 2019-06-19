@@ -58,7 +58,7 @@ namespace FlowAI
             // Fill the smaller buffer from the larger one
             await smallBuf.ConsumeFlowUntilFull(buf, buf.Flow()).Collect();
             // The smaller buffer is now full of fives
-            return smallBuf.Contents.Count == smallBuf.Capacity
+            return smallBuf.Full
                 && buf.Contents.Count == buf.Capacity - smallBuf.Capacity
                 && smallBuf.Contents.All(x => x == 5);
         }
@@ -74,8 +74,8 @@ namespace FlowAI
             // Fill both buffers from the constant through the junction
             await pipe.ConsumeFlowUntilFull(p, p.Flow()).Collect();
             // Now both buffers contain a supersequence of: 1, 2, 3, 4, 5 ...
-            return bufA.Contents.Count == bufA.Capacity
-                && bufB.Contents.Count == bufB.Capacity
+            return bufA.Full
+                && bufB.Full
                 && bufA.Contents.SequenceEqual(new[] { 1, 2, 3, 4, 5, 1, 2, 3, 4, 5 })
                 && bufB.Contents.SequenceEqual(new[] { 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5 });
         }
@@ -91,8 +91,8 @@ namespace FlowAI
             // Fill both buffers from the constant through the splitter
             await pipe.ConsumeFlowUntilFull(p, p.Flow()).Collect();
             // Now both buffers contain a supersequence of: 1, 3, 5, 2, 4 ... 
-            return bufA.Contents.Count == bufA.Capacity
-                && bufB.Contents.Count == bufB.Capacity
+            return bufA.Full
+                && bufB.Full
                 && !bufA.Contents.SequenceEqual(new[] { 1, 2, 3, 4, 5, 1, 2, 3, 4, 5 })
                 && !bufB.Contents.SequenceEqual(new[] { 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5 });
         }
@@ -108,8 +108,8 @@ namespace FlowAI
             // Fill both buffers from the constant through the splitter
             await pipe.ConsumeFlowUntilFull(p, p.Flow()).Collect();
             // Now check that bufB got filled only after bufA was already full
-            return bufA.Contents.Count == bufA.Capacity
-                && bufB.Contents.Count == bufB.Capacity
+            return bufA.Full
+                && bufB.Full
                 && bufA.Contents.SequenceEqual(new[] { 1, 2, 3 })
                 && bufB.Contents.SequenceEqual(new[] { 4, 5, 1, 2, 3, 4, 5 });
         }
@@ -140,7 +140,7 @@ namespace FlowAI
             // Collect the squared sequence into the buffer by having it consume from the map which is piped to the sequence.
             await buf.ConsumeFlowUntilFull(map, map.PipeFlow(p, p.Flow())).Collect();
             // Buf now contains: 1, 4, 9, 16, 25
-            return buf.Contents.Count == buf.Capacity
+            return buf.Full
                 && buf.Contents.SequenceEqual(new[] { 1, 4, 9, 16, 25 });
 
         }
@@ -159,7 +159,7 @@ namespace FlowAI
             // Collect the results into buf by consuming from map through which the splitter is being piped
             await buf.ConsumeFlowUntilFull(map, map.PipeFlow(pipe, pipe.Flow())).Collect();
             // Now the buffer contains: "HELLOworld"
-            return buf.Contents.Count == buf.Capacity
+            return buf.Full
                 && buf.Contents.SequenceEqual("HELLOworld");
         }
         static async Task<bool> TestFlowMapper()
@@ -220,7 +220,7 @@ namespace FlowAI
             // Now the pipe is doing the following on repeat: 
             // pull 1 from seq; pull 2 from seq, filter it into snk; pull 3 from seq and 2 from snk and reduce them
             return ret.SequenceEqual(new[] { 1, 5, 1, 5, 1, 5, 1, 5, 1, 5 })
-                && snk.Contents.Count == 0;
+                && snk.Empty;
         }
         static async Task<bool> TestFibonacciScenario()
         {
@@ -249,7 +249,7 @@ namespace FlowAI
             // Get the fib. machine flowing and keep piping its output into inPipe until outBuf is full
             await inPipe.ConsumeFlowUntil(fibonacci, fibonacci.Flow(), () => outBuf.Contents.Count == outBuf.Capacity).Collect();
             // Now outBuf contains the fibonacci sequence starting from 1!
-            return outBuf.Contents.Count == outBuf.Capacity
+            return outBuf.Full
                 && outBuf.Contents.SequenceEqual(new[] { 1, 1, 2, 3, 5, 8, 13, 21, 34, 55 });
         }
     }

@@ -34,7 +34,7 @@ namespace FlowAI
                 mapped = OnInputTransformed(oldContents, mapped);
                 await outBuf.ConsumeFlow(this, mapped.GetAsyncEnumerator()).Collect();
             }
-            else if (inBuf.Contents.Count == inBuf.Capacity)
+            else if (inBuf.Full)
             {
                 await outBuf.ConsumeDroplet(inBuf, await inBuf.Drip());
             }
