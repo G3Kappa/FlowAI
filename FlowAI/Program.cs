@@ -12,7 +12,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 
@@ -49,7 +52,8 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: ReducingFlowOutputJunction ", TestReducingOutputJunctions(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Fibonacci w/ Recursive Pipe", TestFibonacciScenario(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowAdapter<FileStream,_>  ", TestStreamAdapters1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FileStream str replacements", TestStreamAdapters2(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FileStreamFlowAdapter      ", TestStreamAdapters2(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: NetworkStreamFlowAdapter   ", TestStreamAdapters3(), passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -293,6 +297,44 @@ namespace FlowAI
 
             IProducerConsumerCollection<char> ret = await mapper.PipeFlow(adapter, adapter.Flow()).Collect();
             return ret.SequenceEqual("Hello my dudes!");
+        }
+        static async Task<bool> TestStreamAdapters3()
+        {
+            const int PORT = 5555;
+            IPHostEntry ipHostInfo = Dns.GetHostEntry(Dns.GetHostName());
+            var localEP = new IPEndPoint(ipHostInfo.AddressList[0], PORT);
+            // Create a socket that simulates a remote server sending the same message over and over.
+            var t = Task.Run(async () =>
+            {
+
+                    var remoteSocket = new Socket(localEP.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+                    remoteSocket.Bind(localEP);
+                    remoteSocket.Listen(backlog: 1);
+
+                    while(true)
+                    {
+                        Socket listener = await remoteSocket.AcceptAsync();
+                        byte[] helloMsg = Encoding.UTF8.GetBytes("Hello world from the web!".ToCharArray());
+                        if(await listener.SendAsync(new ArraySegment<byte>(helloMsg), SocketFlags.None) <= 0)
+                        {
+                            break;
+                        }
+                    }
+
+            });
+            // Then create an adapter that connects to our remote socket
+            var adapter = new NetworkStreamFlowAdapter(
+                new IPEndPoint(localEP.Address, PORT),
+                Encoding.UTF8
+            );
+            // Create a replacement mapper
+            var mapper = new FlowMapper<char>(buf =>
+            {
+                return new string(buf).Replace("world", "my dudes").ToCharArray();
+            }, chunkSize: 32);
+
+            IProducerConsumerCollection<char> ret = await mapper.PipeFlow(adapter, adapter.Flow()).Collect();
+            return ret.SequenceEqual("Hello my dudes from the web!");
         }
     }
 }

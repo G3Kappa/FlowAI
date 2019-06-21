@@ -3,7 +3,6 @@ using System.Collections.Async;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using FlowAI.Producers;
 
@@ -12,8 +11,8 @@ namespace FlowAI.Hybrids.Adapters
     public class FlowAdapter<TStream, TDroplet> : FlowHybridBase<TDroplet>, IDisposable
         where TStream : Stream
     {
-        public TStream SourceStream { get; }
-        public int ChunkSize { get; }
+        public TStream SourceStream { get; protected set; }
+        public int ChunkSize { get; protected set; }
         public Func<byte[], TDroplet> ReadAdapter { get; protected set; }
         public Func<TDroplet, byte[]> WriteAdapter { get; protected set; }
 
@@ -57,7 +56,6 @@ namespace FlowAI.Hybrids.Adapters
 
         public override async Task<TDroplet> Drip()
         {
-            if(SourceStream.CanRead)
             {
                 byte[] buf = new byte[ChunkSize];
                 try
@@ -72,27 +70,10 @@ namespace FlowAI.Hybrids.Adapters
             await InterruptFlow(); return default;
         }
 
-        public void Dispose()
+        public virtual void Dispose()
         {
             SourceStream?.Dispose();
-        }
-    }
-
-    public class FileStreamFlowAdapter : FlowAdapter<FileStream, char>
-    {
-        public FileStreamFlowAdapter(FileStream source, Encoding enc) : base(source, null, null, 1)
-        {
-            WriteAdapter = AdaptChars(enc);
-            ReadAdapter = AdaptBytes(enc);
-        }
-        protected virtual Func<byte[], char> AdaptBytes(Encoding enc)
-        {
-            return packet => enc.GetChars(packet)[0];
-        }
-
-        protected virtual Func<char, byte[]> AdaptChars(Encoding enc)
-        {
-            return packet => enc.GetBytes(new[] { packet });
+            SourceStream = null;
         }
     }
 }

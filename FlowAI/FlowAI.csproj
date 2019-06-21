@@ -66,6 +66,8 @@
     <Compile Include="Consumers\Plumbing\FlowBlackHole.cs" />
     <Compile Include="Consumers\Plumbing\SequentialFlowInputJunction.cs" />
     <Compile Include="Exceptions\FlowInterruptedException.cs" />
+    <Compile Include="Hybrids\Adapters\FileStreamFlowAdapter.cs" />
+    <Compile Include="Hybrids\Adapters\NetworkStreamFlowAdapter.cs" />
     <Compile Include="Hybrids\Adapters\StreamFlowAdapter.cs" />
     <Compile Include="Hybrids\FlowHybridBase.cs" />
     <Compile Include="Hybrids\Machines\FlowMapper.cs" />
