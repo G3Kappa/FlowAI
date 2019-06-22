@@ -49,13 +49,14 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowSensor (takes a while) ", TestSensors1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Max&MinDropletBuffers      ", TestMaxMinBuffers(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowMapper                 ", TestFlowMapper(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowTransformer<int,string>", TestFlowTransformers1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowFilter                 ", TestFlowFilter(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowOutputJunction", TestSplittingOutputJunctions1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: ReducingFlowOutputJunction ", TestReducingOutputJunctions(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Fibonacci w/ Recursive Pipe", TestFibonacciScenario(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowAdapter<FileStream,_>  ", TestStreamAdapters1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FileStreamFlowAdapter      ", TestStreamAdapters2(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: NetworkStreamFlowAdapter   ", TestStreamAdapters3(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Network Adapters (may fail)", TestStreamAdapters3(), passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -314,7 +315,7 @@ namespace FlowAI
         }
         static async Task<bool> TestStreamAdapters2()
         {
-            // Create an adapter that parses FileStreams into strings of length 6
+            // Create an adapter that parses FileStreams into individual chars
             var adapter = new FileStreamFlowAdapterChar(
                 File.OpenRead(@"Tests\hello_world.txt"),
                 Encoding.UTF8
@@ -359,6 +360,22 @@ namespace FlowAI
 
             IProducerConsumerCollection<char> ret = await mapper.PipeFlow(adapter, adapter.Flow()).Collect();
             return ret.SequenceEqual("Hello my dudes from the web!");
+        }
+        static async Task<bool> TestFlowTransformers1()
+        {
+            string[] choices = new[] {
+                "The quick brown fox jumps over the lazy dog",
+                "Lorem ipsum dolor sit amet",
+                "undefined",
+                $"{DateTime.Now.ToShortDateString()}"
+            };
+            var seq = new FlowSequence<int>(new[] { 0, 3, 1, 2 });
+            var mapper = new DropletTransformer<int, string>(
+                i => choices[i % choices.Length]
+            );
+
+            IProducerConsumerCollection<string> ret = await mapper.PipeFlow(seq, seq.Flow()).Collect(seq.Sequence.Count);
+            return ret.SequenceEqual(seq.Sequence.Select(i => choices[i]));
         }
     }
 }
