@@ -31,6 +31,12 @@ namespace FlowAI.Hybrids.Machines
         /// <param name="inBuf">The input buffer</param>
         /// <param name="outBuf">The output buffer</param>
         public abstract Task Update(FlowBuffer<TInput> inBuf, FlowBuffer<TOutput> outBuf);
+        /// <summary>
+        /// Called when the input flow is staunched and the machine still has contents in its input buffer.
+        /// </summary>
+        /// <param name="inBuf">The input buffer</param>
+        /// <param name="outBuf">The output buffer</param>
+        public abstract Task Flush(FlowBuffer<TInput> inBuf, FlowBuffer<TOutput> outBuf);
 
         public override async Task<bool> ConsumeDroplet(IFlowProducer<TInput> producer, TInput droplet)
         {
@@ -74,12 +80,12 @@ namespace FlowAI.Hybrids.Machines
                         await ConsumeDroplet(producer, flow.Current);
                         hasNext = await flow.MoveNextAsync();
 
-                        if (!hasNext && OutputBuffer is CyclicFlowBuffer<TInput> outBuf)
+                        if (!hasNext && !InputBuffer.Empty)
                         {
-                            await outBuf.ConsumeFlow(InputBuffer, InputBuffer.Flow()).Collect();
+                            await Flush(InputBuffer, OutputBuffer);
                         }
 
-                        if (OutputBuffer.Contents.Count > 0)
+                        if (!OutputBuffer.Empty)
                         {
                             await Flow(stop: t => OutputBuffer.Empty || (stop?.Invoke(t) ?? false), maxDroplets: OutputBuffer.Capacity)
                             .ForEachAsync(async t =>

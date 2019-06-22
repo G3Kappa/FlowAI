@@ -50,6 +50,7 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Max&MinDropletBuffers      ", TestMaxMinBuffers(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowMapper                 ", TestFlowMapper(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowTransformer<int,string>", TestFlowTransformers1(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Transform chars to string  ", TestFlowTransformers2(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowFilter                 ", TestFlowFilter(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowOutputJunction", TestSplittingOutputJunctions1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: ReducingFlowOutputJunction ", TestReducingOutputJunctions(), passed_tests, total_tests);
@@ -377,5 +378,26 @@ namespace FlowAI
             IProducerConsumerCollection<string> ret = await mapper.PipeFlow(seq, seq.Flow()).Collect(seq.Sequence.Count);
             return ret.SequenceEqual(seq.Sequence.Select(i => choices[i]));
         }
+        static async Task<bool> TestFlowTransformers2()
+        {
+            // Create an adapter that parses FileStreams into individual chars
+            var adapter = new FileStreamFlowAdapterChar(
+                File.OpenRead(@"Tests\hello_world.txt"),
+                Encoding.UTF8
+            );
+            // And an aggregator that creates strings each time it reaches a space or the EOF (implicit - see Flush())
+            var aggregator = new FlowTransformer<char, string>(
+                (chars) => new[] { new string(chars) },
+                consumeIf: (chars, strings) => chars.Last() == ' ' && strings[0].Last() == ' ',
+                chunkSize: 32
+            );
+
+            IProducerConsumerCollection<string> ret = await aggregator.PipeFlow(adapter, adapter.Flow()).Collect();
+
+            return ret.Count == 2
+                && ret.ElementAt(0).Equals("Hello ")
+                && ret.ElementAt(1).Equals("world!");
+        }
+
     }
 }

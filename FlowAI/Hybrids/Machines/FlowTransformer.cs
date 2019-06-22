@@ -40,6 +40,18 @@ namespace FlowAI.Hybrids.Machines
             }
         }
 
+        public override async Task Flush(FlowBuffer<TInput> inBuf, FlowBuffer<TOutput> outBuf)
+        {
+            if(outBuf is FlowBuffer<TInput> buf)
+            {
+                await buf.ConsumeFlow(inBuf, inBuf.Flow()).Collect();
+            }
+            else
+            {
+                await outBuf.ConsumeFlow(this, Map((await inBuf.Flow().Collect()).ToArray()).GetAsyncEnumerator()).Collect();
+            }
+        }
+
         /// <summary>
         /// Called whenever a mapping operation takes place, right before the output buffer loads it.
         /// </summary>
