@@ -1,24 +1,32 @@
 ﻿using System;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace FlowAI.Hybrids.Adapters
 {
-    public class NetworkStreamFlowAdapter : FlowAdapter<NetworkStream, char>
+    /// <summary>
+    /// An intermediate interface between a FlowAdapter and a more specialized type such as NetworkStreamFlowAdapterChar. 
+    /// This lets you define the actual mapping between the bytes you read from a stream and the bytes you write to it.
+    /// </summary>
+    public class NetworkStreamFlowAdapter<TDroplet> : FlowAdapter<NetworkStream, TDroplet>
     {
         public IPEndPoint EndPoint { get; }
         public Socket Socket { get; }
 
-        public NetworkStreamFlowAdapter(IPEndPoint endPoint, Encoding enc) : base(null, null, null, 1)
+        public NetworkStreamFlowAdapter(IPEndPoint endPoint, Func<byte[], TDroplet> readAdapter, Func<TDroplet, byte[]> writeAdapter, int chunkSize) 
+            : base(null, readAdapter, writeAdapter, chunkSize)
         {
             EndPoint = endPoint;
             Socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
-            WriteAdapter = AdaptChars(enc);
-            ReadAdapter = AdaptBytes(enc);
 
             Task.Run(StartFlow).Wait();
+        }
+
+        // Needs to be overridden as NetworkStreams don't support .Position and .Length
+        protected override bool DataAvailable(NetworkStream stream)
+        {
+            return stream.CanRead && stream.DataAvailable;
         }
 
         public override async Task<bool> StartFlow()
@@ -50,14 +58,6 @@ namespace FlowAI.Hybrids.Adapters
             Task.Run(StaunchFlow).Wait();
             Socket.Dispose();
             base.Dispose();
-        }
-        protected virtual Func<byte[], char> AdaptBytes(Encoding enc)
-        {
-            return packet => enc.GetChars(packet)[0];
-        }
-        protected virtual Func<char, byte[]> AdaptChars(Encoding enc)
-        {
-            return packet => enc.GetBytes(new[] { packet });
         }
     }
 }

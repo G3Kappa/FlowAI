@@ -14,7 +14,7 @@ namespace FlowAI.Hybrids.Buffers
     /// <summary>
     /// Consumes and stores droplets until they are requested. Can be created with a fixed capacity, past which no more droplets will be stored.
     /// </summary>
-    public class FlowBuffer<T> : FlowHybridBase<T>
+    public class FlowBuffer<T> : FlowHybridBase<T, T>
     {
         protected ConcurrentQueue<T> Queue { get; private set; }
         public IReadOnlyCollection<T> Contents => Queue;

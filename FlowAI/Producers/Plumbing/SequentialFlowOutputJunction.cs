@@ -36,7 +36,7 @@ namespace FlowAI.Producers.Plumbing
                 return ret;
             }
 
-            await InterruptFlow(new FlowInterruptedException<T>(this, "Drip", fatal: false)); return default;
+            await InterruptFlow(); return default;
         }
     }
 }

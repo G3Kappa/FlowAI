@@ -7,6 +7,7 @@ using FlowAI.Producers;
 using FlowAI.Producers.Plumbing;
 using FlowAI.Producers.Sequences;
 using System;
+using System.Collections.Async;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -46,6 +47,7 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SequentialFlowInputJunction", TestSequentialInputJunctions1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: DropletMapper w/ PipeFlow()", TestMapWithPipe(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowSensor (takes a while) ", TestSensors1(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Max&MinDropletBuffers      ", TestMaxMinBuffers(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowMapper                 ", TestFlowMapper(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowFilter                 ", TestFlowFilter(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowOutputJunction", TestSplittingOutputJunctions1(), passed_tests, total_tests);
@@ -143,12 +145,30 @@ namespace FlowAI
             return sensor.Value == sensor.OnValue 
                 && sensor.Contents.SequenceEqual("hell");
         }
+        static async Task<bool> TestMaxMinBuffers()
+        {
+            var seq = new FlowSequence<int>(new[] { -100, 1, 3, 5, 7, 100 });
+            // These only consume values higher or lower than their contained value and store it until requested
+            var max = new MaxDropletBuffer<int>((a, b) => a - b);
+            var min = new MinDropletBuffer<int>((a, b) => a - b);
+            // Pipe seq through max and min
+            var inPipe = new FlowInputJunction<int>(max, min);
+            // Join max and min at the output
+            var outPipe = new SequentialFlowOutputJunction<int>(() => min.Flow(), () => max.Flow());
+            // Let the sequence exhaust itself and collect the maximum and minimum values found
+            IProducerConsumerCollection<int> res = 
+                await inPipe.ConsumeFlow(seq, seq.Flow())
+                .Take(seq.Sequence.Count)
+                .Redirect(outPipe.Flow())
+                .Collect();
+            return res.SequenceEqual(new[] { -100, 100 });
+        }
         static async Task<bool> TestMapWithPipe()
         {
             // Create a sequence producer that continously emits a pattern
             var p = new FlowSequence<int>(new[] { 1, 2, 3, 4, 5 });
             // Create a mapper that transforms the sequence into a sequence of squares
-            var map = new DropletMapper<int>(i => i * i);
+            var map = new DropletTransformer<int, int>(i => i * i);
             // Create a buffer to store the results
             var buf = new FlowBuffer<int>(5);
             // Collect the squared sequence into the buffer by having it consume from the map which is piped to the sequence.
@@ -164,7 +184,7 @@ namespace FlowAI
             var seqA = new FlowSequence<char>(seq: new char[] { 'h', 'e', 'l', 'l', 'o' });
             var seqB = new FlowSequence<char>(seq: new char[] { 'W', 'O', 'R', 'L', 'D' });
             // Create a mapper that inverts the casing of any character that flows into it
-            var map = new DropletMapper<char>(c => Char.ToUpper(c) == c ? Char.ToLower(c) : Char.ToUpper(c));
+            var map = new DropletTransformer<char, char>(c => Char.ToUpper(c) == c ? Char.ToLower(c) : Char.ToUpper(c));
             // Create a receiving buffer for the resulting sequence
             var buf = new FlowBuffer<char>(capacity: 10);
             // Pipe the two sequences sequentially into the buffer with a splitting output junction
@@ -273,28 +293,38 @@ namespace FlowAI
             // Res contains the fibonacci sequence!
             return res.SequenceEqual(new[] { 1, 1, 2, 3, 5, 8, 13, 21, 34, 55 });
         }
+
+
         static async Task<bool> TestStreamAdapters1()
         {
-            // Create an adapter that parses FileStreams into char droplets
-            var adapter = new FileStreamFlowAdapter(
+            // Create an adapter that parses FileStreams into strings of length 2
+            var adapter = new FileStreamFlowAdapterString(
                 File.OpenRead(@"Tests\hello_world.txt"),
-                Encoding.UTF8
+                Encoding.UTF8,
+                chunkSize: 4
             );
-            // That's it - just collect the flow and you'll read until the EOF
-            IProducerConsumerCollection<char> ret = await adapter.Flow().Collect();
-            return ret.SequenceEqual("Hello world!");
+            // Create a reducer that simply concatenates any string that passes through it (chunkSize doesn't really matter)
+            var aggregator = new FlowMapper<string>(
+                mapping: (a) => new[] { String.Join("", a) },
+                chunkSize: 8
+            );
+            // Pipe the reducer's flow into its own flow piped through the output of the adapter (this exemplifies recursive flows)
+            string ret = (await aggregator.PipeFlow(aggregator, aggregator.PipeFlow(adapter, adapter.Flow())).Collect()).First();
+            return "Hello world!".Equals(ret);
         }
         static async Task<bool> TestStreamAdapters2()
         {
-            var adapter = new FileStreamFlowAdapter(
+            // Create an adapter that parses FileStreams into strings of length 6
+            var adapter = new FileStreamFlowAdapterChar(
                 File.OpenRead(@"Tests\hello_world.txt"),
                 Encoding.UTF8
             );
+            // And a mapper for kicks
             var mapper = new FlowMapper<char>(buf =>
             {
                 return new string(buf).Replace("world", "my dudes").ToCharArray();
             }, chunkSize: 32);
-
+            // That's it - just collect the flow and you'll read until the EOF
             IProducerConsumerCollection<char> ret = await mapper.PipeFlow(adapter, adapter.Flow()).Collect();
             return ret.SequenceEqual("Hello my dudes!");
         }
@@ -303,27 +333,21 @@ namespace FlowAI
             const int PORT = 5555;
             IPHostEntry ipHostInfo = Dns.GetHostEntry(Dns.GetHostName());
             var localEP = new IPEndPoint(ipHostInfo.AddressList[0], PORT);
-            // Create a socket that simulates a remote server sending the same message over and over.
+            // Create a socket that simulates a remote server sending a message and then shutting the connection down
             var t = Task.Run(async () =>
             {
+                var remoteSocket = new Socket(localEP.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+                remoteSocket.Bind(localEP);
+                remoteSocket.Listen(backlog: 1);
 
-                    var remoteSocket = new Socket(localEP.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-                    remoteSocket.Bind(localEP);
-                    remoteSocket.Listen(backlog: 1);
-
-                    while(true)
-                    {
-                        Socket listener = await remoteSocket.AcceptAsync();
-                        byte[] helloMsg = Encoding.UTF8.GetBytes("Hello world from the web!".ToCharArray());
-                        if(await listener.SendAsync(new ArraySegment<byte>(helloMsg), SocketFlags.None) <= 0)
-                        {
-                            break;
-                        }
-                    }
-
+                Socket listener = await remoteSocket.AcceptAsync();
+                byte[] helloMsg = Encoding.UTF8.GetBytes("Hello world from the web!".ToCharArray());
+                await listener.SendAsync(new ArraySegment<byte>(helloMsg), SocketFlags.None);
+                listener.Close();
+                remoteSocket.Close();
             });
             // Then create an adapter that connects to our remote socket
-            var adapter = new NetworkStreamFlowAdapter(
+            var adapter = new NetworkStreamFlowAdapterChar(
                 new IPEndPoint(localEP.Address, PORT),
                 Encoding.UTF8
             );

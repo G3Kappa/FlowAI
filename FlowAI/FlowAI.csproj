@@ -67,8 +67,15 @@
     <Compile Include="Consumers\Plumbing\SequentialFlowInputJunction.cs" />
     <Compile Include="Exceptions\FlowInterruptedException.cs" />
     <Compile Include="Hybrids\Adapters\FileStreamFlowAdapter.cs" />
+    <Compile Include="Hybrids\Adapters\FileStreamFlowAdapterChar.cs" />
+    <Compile Include="Hybrids\Adapters\FileStreamFlowAdapterString.cs" />
     <Compile Include="Hybrids\Adapters\NetworkStreamFlowAdapter.cs" />
+    <Compile Include="Hybrids\Adapters\NetworkStreamFlowAdapterChar.cs" />
+    <Compile Include="Hybrids\Adapters\NetworkStreamFlowAdapterString.cs" />
     <Compile Include="Hybrids\Adapters\StreamFlowAdapter.cs" />
+    <Compile Include="Hybrids\Buffers\DropletBuffer.cs" />
+    <Compile Include="Hybrids\Buffers\MaxDropletBuffer.cs" />
+    <Compile Include="Hybrids\Buffers\MinDropletBuffer.cs" />
     <Compile Include="Hybrids\FlowHybridBase.cs" />
     <Compile Include="Hybrids\Machines\FlowMapper.cs" />
     <Compile Include="AsyncExtensions.cs" />
@@ -77,7 +84,8 @@
     <Compile Include="Hybrids\Buffers\FlowBuffer.cs" />
     <Compile Include="Hybrids\Machines\FlowFilter.cs" />
     <Compile Include="Hybrids\Machines\FlowMachineBase.cs" />
-    <Compile Include="Hybrids\Machines\DropletMapper.cs" />
+    <Compile Include="Hybrids\Machines\DropletTransformer.cs" />
+    <Compile Include="Hybrids\Machines\FlowTransformer.cs" />
     <Compile Include="Hybrids\Sensors\FlowSensor.cs" />
     <Compile Include="Producers\FlowConstant.cs" />
     <Compile Include="Consumers\Plumbing\FlowInputJunction.cs" />

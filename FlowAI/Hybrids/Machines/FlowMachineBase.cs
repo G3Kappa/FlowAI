@@ -11,16 +11,17 @@ namespace FlowAI.Hybrids.Machines
     /// <summary>
     /// A consumer-producer that manages an input and an output buffer, consuming from the input and producing from the output.
     /// </summary>
-    /// <typeparam name="T"></typeparam>
-    public abstract class FlowMachineBase<T> : FlowHybridBase<T>
+    public abstract class FlowMachineBase<TInput, TOutput> : FlowHybridBase<TInput, TOutput>
     {
-        protected CyclicFlowBuffer<T> InputBuffer { get; }
-        protected CyclicFlowBuffer<T> OutputBuffer { get; }
+        protected CyclicFlowBuffer<TInput> InputBuffer { get; }
+        protected CyclicFlowBuffer<TOutput> OutputBuffer { get; }
+
+        protected bool ShouldUpdate { get; set; } = true;
 
         public FlowMachineBase(int nInputs, int nOutputs) : base()
         {
-            InputBuffer = new CyclicFlowBuffer<T>(nInputs);
-            OutputBuffer = new CyclicFlowBuffer<T>(nOutputs);
+            InputBuffer = new CyclicFlowBuffer<TInput>(nInputs);
+            OutputBuffer = new CyclicFlowBuffer<TOutput>(nOutputs);
         }
 
         /// <summary>
@@ -29,15 +30,18 @@ namespace FlowAI.Hybrids.Machines
         /// </summary>
         /// <param name="inBuf">The input buffer</param>
         /// <param name="outBuf">The output buffer</param>
-        public abstract Task Update(FlowBuffer<T> inBuf, FlowBuffer<T> outBuf);
+        public abstract Task Update(FlowBuffer<TInput> inBuf, FlowBuffer<TOutput> outBuf);
 
-        public override async Task<bool> ConsumeDroplet(IFlowProducer<T> producer, T droplet)
+        public override async Task<bool> ConsumeDroplet(IFlowProducer<TInput> producer, TInput droplet)
         {
             bool ret = await InputBuffer.ConsumeDroplet(producer, droplet);
-            await Update(InputBuffer, OutputBuffer);
+            if(ShouldUpdate)
+            {
+                await Update(InputBuffer, OutputBuffer);
+            }
             return ret;
         }
-        public override IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow)
+        public override IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<TInput> producer, IAsyncEnumerator<TInput> flow)
         {
             return new AsyncEnumerator<bool>(async yield =>
             {
@@ -49,12 +53,12 @@ namespace FlowAI.Hybrids.Machines
             });
         }
 
-        public sealed override async Task<T> Drip()
+        public sealed override async Task<TOutput> Drip()
         {
             return await OutputBuffer.Drip();
         }
 
-        public override IAsyncEnumerator<T> PipeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow, Predicate<T> stop = null, int maxDroplets = 0)
+        public override IAsyncEnumerator<TOutput> PipeFlow(IFlowProducer<TInput> producer, IAsyncEnumerator<TInput> flow, Predicate<TOutput> stop = null, int maxDroplets = 0)
         {
             // The default implementation is 1-1 dripping, while FlowMachines have a tailored and more efficient nInputs:nOutputs flowing implementation.
 
@@ -62,7 +66,7 @@ namespace FlowAI.Hybrids.Machines
 
             return InputBuffer.Capacity == 0
                 ? base.PipeFlow(producer, flow, stop, maxDroplets)
-                : new AsyncEnumerator<T>(async yield =>
+                : new AsyncEnumerator<TOutput>(async yield =>
                 {
                     bool hasNext = await flow.MoveNextAsync();
                     while (hasNext)
@@ -70,9 +74,9 @@ namespace FlowAI.Hybrids.Machines
                         await ConsumeDroplet(producer, flow.Current);
                         hasNext = await flow.MoveNextAsync();
 
-                        if (!hasNext)
+                        if (!hasNext && OutputBuffer is CyclicFlowBuffer<TInput> outBuf)
                         {
-                            await OutputBuffer.ConsumeFlow(InputBuffer, InputBuffer.Flow()).Collect();
+                            await outBuf.ConsumeFlow(InputBuffer, InputBuffer.Flow()).Collect();
                         }
 
                         if (OutputBuffer.Contents.Count > 0)

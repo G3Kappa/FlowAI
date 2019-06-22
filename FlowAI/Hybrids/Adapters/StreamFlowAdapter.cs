@@ -8,13 +8,25 @@ using FlowAI.Producers;
 
 namespace FlowAI.Hybrids.Adapters
 {
-    public class FlowAdapter<TStream, TDroplet> : FlowHybridBase<TDroplet>, IDisposable
+    public class FlowAdapter<TStream, TDroplet> : FlowHybridBase<TDroplet, TDroplet>, IDisposable
         where TStream : Stream
     {
         public TStream SourceStream { get; protected set; }
         public int ChunkSize { get; protected set; }
         public Func<byte[], TDroplet> ReadAdapter { get; protected set; }
         public Func<TDroplet, byte[]> WriteAdapter { get; protected set; }
+
+        protected virtual bool DataAvailable(TStream stream)
+        {
+            try
+            {
+                return stream.CanRead && stream.Position < stream.Length;
+            }
+            catch(NotSupportedException)
+            {
+                return false;
+            }
+        }
 
         public FlowAdapter(TStream source, Func<byte[], TDroplet> readAdapter, Func<TDroplet, byte[]> writeAdapter, int chunkSize) : base()
         {
@@ -60,7 +72,7 @@ namespace FlowAI.Hybrids.Adapters
                 byte[] buf = new byte[ChunkSize];
                 try
                 {
-                    if (await SourceStream.ReadAsync(buf, 0, ChunkSize) > 0)
+                    if (DataAvailable(SourceStream) && await SourceStream.ReadAsync(buf, 0, ChunkSize) > 0)
                     {
                         return ReadAdapter(buf);
                     }
