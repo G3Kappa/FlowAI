@@ -36,7 +36,7 @@ namespace FlowAI.Hybrids.Machines
                 Task.Run(async () =>
                 {
                     await FilterSink.ConsumeFlow(InputBuffer, input.GetAsyncEnumerator()).Collect();
-                });
+                }).Wait();
             }
 
             return base.OnInputTransformed(input, output);
