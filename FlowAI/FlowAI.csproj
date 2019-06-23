@@ -87,9 +87,6 @@
     <Compile Include="Hybrids\Machines\DropletTransformer.cs" />
     <Compile Include="Hybrids\Machines\FlowTransformer.cs" />
     <Compile Include="Hybrids\Sensors\FlowSensor.cs" />
-    <None Include="LICENSE">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
     <Compile Include="Producers\FlowConstant.cs" />
     <Compile Include="Consumers\Plumbing\FlowInputJunction.cs" />
     <Compile Include="Producers\FlowProducerBase.cs" />
