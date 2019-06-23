@@ -50,7 +50,7 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowSensor (takes a while) ", TestSensors1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Max&MinDropletBuffers      ", TestMaxMinBuffers(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowMapper                 ", TestFlowMapper(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowTransformer<int,string>", TestFlowTransformers1(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowTransformer<int,string>", TestDropletTransformers1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: CSV file to dynamic objects", ParseCsvToDynamicObjects(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowFilter                 ", TestFlowFilter(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowOutputJunction", TestSplittingOutputJunctions1(), passed_tests, total_tests);
@@ -333,6 +333,7 @@ namespace FlowAI
             IProducerConsumerCollection<char> ret = await mapper.PipeFlow(adapter, adapter.Flow()).Collect();
             return ret.SequenceEqual("Hello my dudes!");
         }
+        // Adapts socket streams and tests that they work. Sometimes it fails, but rerunning this test seems to fix it.
         static async Task<bool> TestStreamAdapters3()
         {
             const int PORT = 5555;
@@ -365,7 +366,7 @@ namespace FlowAI
             IProducerConsumerCollection<char> ret = await mapper.PipeFlow(adapter, adapter.Flow()).Collect();
             return ret.SequenceEqual("Hello my dudes from the web!");
         }
-        static async Task<bool> TestFlowTransformers1()
+        static async Task<bool> TestDropletTransformers1()
         {
             string[] choices = new[] {
                 "The quick brown fox jumps over the lazy dog",
@@ -513,6 +514,7 @@ namespace FlowAI
             ReducingFlowOutputJunction<bool> or_gate   = Gate(op_or,  () => B.Flow(), () => and_gate1.Flow());
             ReducingFlowOutputJunction<bool> and_gate2 = Gate(op_and, () => A.Flow(), () => or_gate.Flow());
 
+            // This example demonstrates a new usage pattern with FlowVariables being changed after each drip
             bool ret = (await and_gate2.Drip()) == false;
 
             A.Value = true;
@@ -536,5 +538,6 @@ namespace FlowAI
                 return new ReducingFlowOutputJunction<bool>(op, flows);
             }
         }
+
     }
 }
