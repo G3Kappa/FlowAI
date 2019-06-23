@@ -11,6 +11,7 @@ using System.Collections.Async;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Dynamic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -50,7 +51,7 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Max&MinDropletBuffers      ", TestMaxMinBuffers(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowMapper                 ", TestFlowMapper(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowTransformer<int,string>", TestFlowTransformers1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Transform chars to string  ", TestFlowTransformers2(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: CSV file to dynamic objects", ParseCsvToDynamicObjects(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowFilter                 ", TestFlowFilter(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowOutputJunction", TestSplittingOutputJunctions1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: ReducingFlowOutputJunction ", TestReducingOutputJunctions(), passed_tests, total_tests);
@@ -58,6 +59,7 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowAdapter<FileStream,_>  ", TestStreamAdapters1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FileStreamFlowAdapter      ", TestStreamAdapters2(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Network Adapters (may fail)", TestStreamAdapters3(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: String rewriting engine    ", TestStringRewritingMachine(), passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -378,26 +380,84 @@ namespace FlowAI
             IProducerConsumerCollection<string> ret = await mapper.PipeFlow(seq, seq.Flow()).Collect(seq.Sequence.Count);
             return ret.SequenceEqual(seq.Sequence.Select(i => choices[i]));
         }
-        static async Task<bool> TestFlowTransformers2()
+        static async Task<bool> ParseCsvToDynamicObjects()
         {
             // Create an adapter that parses FileStreams into individual chars
             var adapter = new FileStreamFlowAdapterChar(
-                File.OpenRead(@"Tests\hello_world.txt"),
+                File.OpenRead(@"Tests\csv.txt"),
                 Encoding.UTF8
             );
-            // And an aggregator that creates strings each time it reaches a space or the EOF (implicit - see Flush())
-            var aggregator = new FlowTransformer<char, string>(
-                (chars) => new[] { new string(chars) },
-                consumeIf: (chars, strings) => chars.Last() == ' ' && strings[0].Last() == ' ',
-                chunkSize: 32
+            // An aggregator that creates strings each time it reaches a newline or the EOF (implicit - see Flush())
+            var newlineAggregator = new FlowTransformer<char, string>(
+                (chars) => new[] { new string(chars).Replace("\r\n", "") },
+                consumeIf: (chars, strings) => chars.Last() == '\n',
+                chunkSize: 1024 /* Strings longer than this get truncated */
+            );
+            // And a splitter that splits the parsed lines at the semicolon
+            var commaSplitter = new FlowTransformer<string, string[]>(
+                (instrings) => instrings.Select(s => s.Split(';')).ToArray(),
+                consumeIf: (instrings, outstrings) => instrings.Any(),
+                chunkSize: 1024
+            );
+            // Create a transformer that takes the parser's output and creates a list of custom objects
+            // It expects a string[] header and one or more string[] data droplets
+            var instantiator = new FlowTransformer<string[], object>(
+                (input) =>
+                {
+                    string[] header = input.Take(1).First();
+                    string[][] values = input.Skip(1).ToArray();
+
+                    IEnumerable<ExpandoObject> ret = values.Select((vals) =>
+                    {
+                        var obj = new ExpandoObject();
+                        IEnumerable<KeyValuePair<string, object>> props = vals.Select((v, i) => new KeyValuePair<string, object>(header[i], v));
+                        foreach (KeyValuePair<string, object> p in props)
+                        {
+                            ((IDictionary<string, object>)obj).Add(p);
+                        }
+                        return obj;
+                    });
+
+                    return ret.ToArray();
+                },
+                consumeIf: (i, o) => false, // Run when the flow staunches
+                chunkSize: 4096
+            );
+            // Pipe everything together and you have a CSV file parser
+            IProducerConsumerCollection<object> objects =
+                await instantiator.PipeFlow(
+                    commaSplitter, commaSplitter.PipeFlow(
+                        newlineAggregator, newlineAggregator.PipeFlow(
+                            adapter, adapter.Flow()
+                        )
+                    )
+                ).Collect();
+            return objects.Count == 3
+                && ((dynamic)objects.ElementAt(0)).Id.Equals("0")
+                && ((dynamic)objects.ElementAt(0)).Name.Equals("Foo")
+                && ((dynamic)objects.ElementAt(0)).Desc.Equals("Bar")
+                && ((dynamic)objects.ElementAt(1)).Id.Equals("1")
+                && ((dynamic)objects.ElementAt(1)).Name.Equals("Bob")
+                && ((dynamic)objects.ElementAt(1)).Desc.Equals("Alice")
+                && ((dynamic)objects.ElementAt(2)).Id.Equals("2")
+                && ((dynamic)objects.ElementAt(2)).Name.Equals("Ying")
+                && ((dynamic)objects.ElementAt(2)).Desc.Equals("Yang");
+        }
+        static async Task<bool> TestStringRewritingMachine()
+        {
+            // http://www.freefour.com/rewriting-as-a-computational-paradigm/
+
+            var rewriter = new DropletTransformer<string, string>(
+                input => input
+                    .Replace("1_", "1++")
+                    .Replace("0_", "1")
+                    .Replace("01++", "10")
+                    .Replace("11++", "1++0")
+                    .Replace("_1++", "_10")
             );
 
-            IProducerConsumerCollection<string> ret = await aggregator.PipeFlow(adapter, adapter.Flow()).Collect();
-
-            return ret.Count == 2
-                && ret.ElementAt(0).Equals("Hello ")
-                && ret.ElementAt(1).Equals("world!");
+            IProducerConsumerCollection<string> ret = await rewriter.PipeFlow(rewriter, rewriter.PipeFlow(rewriter, new[] { "_1011_"}.GetAsyncEnumerator())).Collect();
+            return ret.Count == 1 && ret.First().Equals("_1100");
         }
-
     }
 }
