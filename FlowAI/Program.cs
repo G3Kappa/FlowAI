@@ -31,7 +31,7 @@ namespace FlowAI
             stopwatch.Start();
             Console.Write($"{name}: ");
             bool ret = await testToAwait;
-            Console.WriteLine($"{stopwatch.Elapsed.TotalSeconds:0.000}s. ({(ret ? "PASS" : "FAIL" )})");
+            Console.WriteLine($"{stopwatch.Elapsed.TotalSeconds:0.000}s. ({(ret ? "PASS" : "FAIL")})");
             stopwatch.Stop();
             return (passed_tests + (ret ? 1 : 0), total_tests + 1);
         }
@@ -60,6 +60,7 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FileStreamFlowAdapter      ", TestStreamAdapters2(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Network Adapters (may fail)", TestStreamAdapters3(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: String rewriting engine    ", TestStringRewritingMachine(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Binary function evaluator  ", TestBinaryCircuit(), passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -68,7 +69,7 @@ namespace FlowAI
         static async Task<bool> TestConstToBuf()
         {
             // Create a constant producer that continously emits 5's
-            var k = new FlowConstant<int>(5);
+            var k = new FlowVariable<int>(5);
             // Create a buffer that stores up to ten ints
             var buf = new FlowBuffer<int>(capacity: 10);
             // Consume flow from the constant producer until the buffer is full, then close the faucet to tell the buffer to stop consuming
@@ -138,7 +139,7 @@ namespace FlowAI
             // Create a sequence producer that continously emits a random pattern
             var p = new RandomFlowSequence<char>(
                 getSymbol: (rng) => rng.Choose("ohlea".ToList()),
-                sequenceLength: 5, 
+                sequenceLength: 5,
                 repeatSameSequence: false
             );
             // Create a flow sensor that matches a possible pattern
@@ -146,7 +147,7 @@ namespace FlowAI
             // Consume from the sequence generator until the pattern is matched
             await sensor.ConsumeFlowUntil(p, p.Flow(), () => sensor.Value == sensor.OnValue).Collect();
             // Now the sensor contains the matched pattern ("hello") and is set to its OnValue
-            return sensor.Value == sensor.OnValue 
+            return sensor.Value == sensor.OnValue
                 && sensor.Contents.SequenceEqual("hell");
         }
         static async Task<bool> TestMaxMinBuffers()
@@ -160,7 +161,7 @@ namespace FlowAI
             // Join max and min at the output
             var outPipe = new SequentialFlowOutputJunction<int>(() => min.Flow(), () => max.Flow());
             // Let the sequence exhaust itself and collect the maximum and minimum values found
-            IProducerConsumerCollection<int> res = 
+            IProducerConsumerCollection<int> res =
                 await inPipe.ConsumeFlow(seq, seq.Flow())
                 .Take(seq.Sequence.Count)
                 .Redirect(outPipe.Flow())
@@ -267,7 +268,7 @@ namespace FlowAI
             // Create a machine that sums and returns the contents of its input buffer
             var fibonacci = new FlowMapper<int>(buf =>
             {
-                if(buf.Length == 2) // eg. [ 1, 2 ]
+                if (buf.Length == 2) // eg. [ 1, 2 ]
                 {
                     return new[] { buf[1], buf[0] + buf[1] }; // eg. [ 2, 3 ]
                 }
@@ -284,12 +285,12 @@ namespace FlowAI
             );
             // Get the fib. machine flowing and keep piping its output into inPipe until outBuf is full
             // Once outBuf is full, redirect the Flow to outBuf's own Flow, and collect that.
-            IProducerConsumerCollection<int> res = 
+            IProducerConsumerCollection<int> res =
                 await inPipe.ConsumeFlowUntil(                          // Let inPipe consume droplets until stop() returns true
                     fibonacci,                                          // The droplets are being consumed from the 'fibonacci' object
                     fibonacci.KickstartFlow(                            // Seed the fibonacci machine with initial state: { 0, 1 }
                         fibonacci, new[] { 0, 1 }.GetAsyncEnumerator()  // And then start using the machine's own flow
-                    ), 
+                    ),
                     stop: () => outBuf.Full                             // Finally, stop when outBuf has reached max. capacity
                 )                                                       // Once inPipe.ConsumeFlow has finished, drop its results and start piping from outBuf
                 .Redirect(outBuf.Flow())                                // (ConsumeFlow returns booleans similar in function to IEnumerator.MoveNext(), but we don't need them)
@@ -380,6 +381,7 @@ namespace FlowAI
             IProducerConsumerCollection<string> ret = await mapper.PipeFlow(seq, seq.Flow()).Collect(seq.Sequence.Count);
             return ret.SequenceEqual(seq.Sequence.Select(i => choices[i]));
         }
+        // Parses CSV files with a heading row into dynamic key-value store objects with properties matching the heading row
         static async Task<bool> ParseCsvToDynamicObjects()
         {
             // Create an adapter that parses FileStreams into individual chars
@@ -443,6 +445,7 @@ namespace FlowAI
                 && ((dynamic)objects.ElementAt(2)).Name.Equals("Ying")
                 && ((dynamic)objects.ElementAt(2)).Desc.Equals("Yang");
         }
+        // Creates a string rewriting language and tests its efficacy
         static async Task<bool> TestStringRewritingMachine()
         {
             // http://www.freefour.com/rewriting-as-a-computational-paradigm/
@@ -458,7 +461,7 @@ namespace FlowAI
                     // get started
                     .Replace("1_", "1++")      // [Rule 1]
                     .Replace("0_", "1")        // [Rule 2]
-                    // eliminate ++
+                                               // eliminate ++
                     .Replace("01++", "10")     // [Rule 3]
                     .Replace("11++", "1++0")   // [Rule 4]
                     .Replace("_1++", "_10")    // [Rule 5]
@@ -484,7 +487,54 @@ namespace FlowAI
                     )
                 ).Collect();
 
-            return ret.Count == 1 && ret.First().Equals("_1100");
+            return ret.Count == 1
+                && ret.First().Equals("_1100");
+        }
+        // Creates a boolean function as a flow of bools and evaluates it by collecting the result
+        static async Task<bool> TestBinaryCircuit()
+        {
+            var not = new DropletTransformer<bool, bool>(a => !a);
+
+            Func<bool, bool, bool> op_and = (a, b) => a && b;
+            Func<bool, bool, bool> op_or  = (a, b) => a || b;
+            Func<bool, bool, bool> op_xor = (a, b) => a ^  b;
+            Func<bool, bool, bool> op_nand= (a, b) => !(a && b);
+            Func<bool, bool, bool> op_nor = (a, b) => !(a || b);
+            Func<bool, bool, bool> op_xnor = (a, b) => !(a ^ b);
+
+            // Make a machine that evaluates the function: (A and (B or ((B xor D) and C)))
+            var A = new FlowVariable<bool>(false);
+            var B = new FlowVariable<bool>(true );
+            var C = new FlowVariable<bool>(false);
+            var D = new FlowVariable<bool>(true );
+
+            ReducingFlowOutputJunction<bool> xor_gate  = Gate(op_xor, () => B.Flow(), () => D.Flow());
+            ReducingFlowOutputJunction<bool> and_gate1 = Gate(op_and, () => xor_gate.Flow(), () => C.Flow());
+            ReducingFlowOutputJunction<bool> or_gate   = Gate(op_or,  () => B.Flow(), () => and_gate1.Flow());
+            ReducingFlowOutputJunction<bool> and_gate2 = Gate(op_and, () => A.Flow(), () => or_gate.Flow());
+
+            bool ret = (await and_gate2.Drip()) == false;
+
+            A.Value = true;
+            B.Value = true;
+            C.Value = true;
+            D.Value = true;
+
+            ret &= (await and_gate2.Drip()) == true;
+
+            A.Value = true;
+            B.Value = false;
+            C.Value = true;
+            D.Value = true;
+
+            ret &= (await and_gate2.Drip()) == true;
+
+            return ret;
+
+            ReducingFlowOutputJunction<bool> Gate(Func<bool, bool, bool> op, params Func<IAsyncEnumerator<bool>>[] flows)
+            {
+                return new ReducingFlowOutputJunction<bool>(op, flows);
+            }
         }
     }
 }

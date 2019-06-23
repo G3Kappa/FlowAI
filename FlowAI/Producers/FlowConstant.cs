@@ -6,10 +6,10 @@ namespace FlowAI.Producers
     /// <summary>
     /// A simple producer that continuously emits a constant.
     /// </summary>
-    public class FlowConstant<T> : FlowProducerBase<T>
+    public class FlowVariable<T> : FlowProducerBase<T>
     {
-        public T Value { get; }
-        public FlowConstant(T value) : base()
+        public T Value { get; set; }
+        public FlowVariable(T value) : base()
         {
             Value = value;
         }
