@@ -447,16 +447,43 @@ namespace FlowAI
         {
             // http://www.freefour.com/rewriting-as-a-computational-paradigm/
 
+            /* 
+                "Now that we have a string-rewriting language, let’s write a program. 
+                 Let’s say you want to increment a binary number that is given to you as a string delimited with underscores. 
+                 E.g., you’d like a program that takes in “_1011_” as input and returns as output “_1100”. 
+                 Here is a program to do so:" 
+             */
             var rewriter = new DropletTransformer<string, string>(
                 input => input
-                    .Replace("1_", "1++")
-                    .Replace("0_", "1")
-                    .Replace("01++", "10")
-                    .Replace("11++", "1++0")
-                    .Replace("_1++", "_10")
+                    // get started
+                    .Replace("1_", "1++")      // [Rule 1]
+                    .Replace("0_", "1")        // [Rule 2]
+                    // eliminate ++
+                    .Replace("01++", "10")     // [Rule 3]
+                    .Replace("11++", "1++0")   // [Rule 4]
+                    .Replace("_1++", "_10")    // [Rule 5]
             );
 
-            IProducerConsumerCollection<string> ret = await rewriter.PipeFlow(rewriter, rewriter.PipeFlow(rewriter, new[] { "_1011_"}.GetAsyncEnumerator())).Collect();
+            /*
+                "In this program, we use ++ as a marker for “increment what’s to the left of this marker”. 
+                 Computation on our example input proceeds through the following program states:"
+
+                 String	    Reasoning
+                 -------------------------
+                _1011_	    Input
+                _1011++	    by applying Rule1
+                _101++0 	Rule4
+                _1100	    Rule3
+            */
+
+            // As for our flow network, we just need to recursively transform a string until the mapping does nothing!
+            IProducerConsumerCollection<string> ret =
+                await rewriter.PipeFlow(rewriter,                // So we pipe the rewriter's flow
+                    rewriter.PipeFlow(rewriter,                  // to its own flow after it has consumed
+                        new[] { "_1011_" }.GetAsyncEnumerator()  // the input droplet _1011_
+                    )
+                ).Collect();
+
             return ret.Count == 1 && ret.First().Equals("_1100");
         }
     }
