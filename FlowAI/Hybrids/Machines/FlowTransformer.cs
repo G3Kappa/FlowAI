@@ -12,8 +12,8 @@ namespace FlowAI.Hybrids.Machines
     /// </summary>
     public class FlowTransformer<TInput, TOutput> : FlowMachineBase<TInput, TOutput>
     {
-        public Func<TInput[], TOutput[]> Map { get; }
-        public Func<TInput[], TOutput[], bool> ConsumeIf { get; }
+        public Func<TInput[], TOutput[]> Map { get; protected set; }
+        public Func<TInput[], TOutput[], bool> ConsumeIf { get; protected set; }
         public int ChunkSize { get; protected set; }
 
         public FlowTransformer(Func<TInput[], TOutput[]> mapping, Func<TInput[], TOutput[], bool> consumeIf, int chunkSize) : base(chunkSize, 0)

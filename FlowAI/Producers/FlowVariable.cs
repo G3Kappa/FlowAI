@@ -4,7 +4,7 @@
 namespace FlowAI.Producers
 {
     /// <summary>
-    /// A simple producer that continuously emits a constant.
+    /// A simple producer that continuously emits a value.
     /// </summary>
     public class FlowVariable<T> : FlowProducerBase<T>
     {
