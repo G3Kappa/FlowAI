@@ -2,6 +2,7 @@
 using FlowAI.Producers;
 using System;
 using System.Collections.Async;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 
@@ -39,6 +40,11 @@ namespace FlowAI.Hybrids
             });
         }
 
+        public IAsyncEnumerator<TOutput> PipeFlow(IFlowProducer<TInput> producer, IEnumerable<TInput> source, Predicate<TOutput> stop = null, int maxDroplets = 0)
+        {
+            return PipeFlow(producer, source.GetAsyncEnumerator(), stop, maxDroplets);
+        }
+
         /// <summary>
         /// Pipes an input flow into this component until it runs dry, then returns the output flow.
         /// </summary>
@@ -57,5 +63,11 @@ namespace FlowAI.Hybrids
                 });
             });
         }
+        public IAsyncEnumerator<TOutput> KickstartFlow(IFlowProducer<TInput> producer, IEnumerable<TInput> source, Predicate<TOutput> pipeStop = null, int pipeMaxDroplets = 0, Predicate<TOutput> stop = null, int maxDroplets = 0)
+        {
+            return KickstartFlow(producer, source.GetAsyncEnumerator(), pipeStop, pipeMaxDroplets, stop, maxDroplets);
+        }
+
+
     }
 }

@@ -1,6 +1,9 @@
 ﻿using FlowAI.Hybrids.Buffers;
 using FlowAI.Hybrids.Machines;
+using FlowAI.Producers;
 using System;
+using System.Collections.Async;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -21,16 +24,16 @@ namespace FlowAI.Hybrids.Neural
     /// A simple perceptron that can be used to train a binary classifier.
     /// It needs to be trained on some data first. After that, its flow can be used to make predictions.
     /// </summary>
-    public class FlowPerceptron : FlowTransformer<double, double>
+    public class FlowPerceptron : FlowTransformer<double[], double>
     {
         public double[] Weights { get; private set; }
 
         public Func<double, double> ActivationFunction { get; protected set; }
 
         /// <summary>
-        /// Content piped to this buffer will be consumed as training examples by the perceptron.
+        /// If the training buffer contains a droplet, the next input data will be considered an example with that droplet as the known answer.
         /// </summary>
-        public FlowBuffer<(double[] Input, double Output)> TrainingBuffer { get; protected set; }
+        public FlowBuffer<(double[], double)> TrainingBuffer { get; protected set; }
         public int TrainingBufferEpochs { get; private set; }
         public double TrainingBufferLearningRate { get; private set; }
 
@@ -68,13 +71,14 @@ namespace FlowAI.Hybrids.Neural
             return new[] { ActivationFunction(weightedSum) >= Weights[0] ? 1.0 : 0.0 };
         }
 
-        public override async Task Update(FlowBuffer<double> inBuf, FlowBuffer<double> outBuf)
+        public override async Task Update(FlowBuffer<double[]> inBuf, FlowBuffer<double> outBuf)
         {
+            await base.Update(inBuf, outBuf);
             if(!TrainingBuffer.Empty)
             {
-                Train(await TrainingBuffer.Flow().Collect(), TrainingBufferEpochs, TrainingBufferLearningRate);
+                var dataset = await TrainingBuffer.Flow().Collect();
+                Train(dataset, TrainingBufferEpochs, TrainingBufferLearningRate);
             }
-            await base.Update(inBuf, outBuf);
         }
 
         private void InitializeWeights(double[] w)
@@ -92,7 +96,7 @@ namespace FlowAI.Hybrids.Neural
             InitializeWeights(Weights);
 
             ActivationFunction = activation ?? ActivationFunctions.Sigmoid;
-            Map = Activate;
+            Map = inputs => inputs.SelectMany(i => Activate(i)).ToArray();
 
             TrainingBuffer = new FlowBuffer<(double[], double)>();
             TrainingBufferEpochs = bufferEpochs;

@@ -102,6 +102,7 @@
     <Compile Include="Producers\FlowProducerBase.cs" />
     <Compile Include="Consumers\IFlowConsumer.cs" />
     <Compile Include="Producers\LazyFlowVariable.cs" />
+    <Compile Include="Producers\Plumbing\MergingFlowOutputJunction.cs" />
     <Compile Include="Producers\Plumbing\ReducingFlowOutputJunction.cs" />
     <Compile Include="Producers\Plumbing\SequentialFlowOutputJunction.cs" />
     <Compile Include="Producers\Plumbing\SplittingFlowOutputJunction.cs" />

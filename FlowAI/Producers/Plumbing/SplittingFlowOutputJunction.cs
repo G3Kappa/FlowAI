@@ -10,7 +10,7 @@ namespace FlowAI.Producers.Plumbing
     /// <summary>
     /// Merges the flow of a number of producers into a single Flow by alternating chunks of droplets from each producer.
     /// </summary>
-    public class SplittingFlowOutputJunction<T> : FlowOutputJunctionBase<T>
+    public class SplittingFlowOutputJunction<T> : FlowOutputJunctionBase<T, T>
     {
         public int ChunkSize { get; protected set; } = 1;
         public int CurrentDroplet { get; protected set; } = 0;

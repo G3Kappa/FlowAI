@@ -10,7 +10,7 @@ namespace FlowAI.Producers.Plumbing
     /// <summary>
     /// Merges the flow of a number of producers into a single Flow by applying a reduction function over one droplet from all producers at a time.
     /// </summary>
-    public class ReducingFlowOutputJunction<T> : FlowOutputJunctionBase<T>
+    public class ReducingFlowOutputJunction<T> : FlowOutputJunctionBase<T, T>
     {
         public Func<T, T, T> Reduce { get; set; }
 

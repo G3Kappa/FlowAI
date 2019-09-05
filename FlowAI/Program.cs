@@ -64,6 +64,7 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Binary function evaluator  ", TestBinaryCircuit(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Perceptron-based AND Gate  ", TestPerceptron1(), passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Percepton Flow interfaces  ", TestPerceptron2(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Percepton Flow autolearner ", TestPerceptron3(), passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -292,7 +293,7 @@ namespace FlowAI
                 await inPipe.ConsumeFlowUntil(                          // Let inPipe consume droplets until stop() returns true
                     fibonacci,                                          // The droplets are being consumed from the 'fibonacci' object
                     fibonacci.KickstartFlow(                            // Seed the fibonacci machine with initial state: { 0, 1 }
-                        fibonacci, new[] { 0, 1 }.GetAsyncEnumerator()  // And then start using the machine's own flow
+                        fibonacci, new[] { 0, 1 }                       // And then start using the machine's own flow
                     ),
                     stop: () => outBuf.Full                             // Finally, stop when outBuf has reached max. capacity
                 )                                                       // Once inPipe.ConsumeFlow has finished, drop its results and start piping from outBuf
@@ -487,7 +488,7 @@ namespace FlowAI
             IProducerConsumerCollection<string> ret =
                 await rewriter.PipeFlow(rewriter,                // So we pipe the rewriter's flow
                     rewriter.PipeFlow(rewriter,                  // to its own flow after it has consumed
-                        new[] { "_1011_" }.GetAsyncEnumerator()  // the input droplet _1011_
+                        new[] { "_1011_" }                       // the input droplet _1011_
                     )
                 ).Collect();
 
@@ -552,10 +553,10 @@ namespace FlowAI
                 (new[]{ 1.0, 1.0 }, 1.0),
             }, epochs: 100, learningRate: 0.01);
 
-            double truthTable1 = (await andGatePerceptron.PipeFlow(null, new[] { 0.0, 0.0 }.GetAsyncEnumerator()).Collect(1)).First();
-            double truthTable2 = (await andGatePerceptron.PipeFlow(null, new[] { 0.0, 1.0 }.GetAsyncEnumerator()).Collect(1)).First();
-            double truthTable3 = (await andGatePerceptron.PipeFlow(null, new[] { 1.0, 0.0 }.GetAsyncEnumerator()).Collect(1)).First();
-            double truthTable4 = (await andGatePerceptron.PipeFlow(null, new[] { 1.0, 1.0 }.GetAsyncEnumerator()).Collect(1)).First();
+            double truthTable1 = (await andGatePerceptron.PipeFlow(null, new[] { new[] { 0.0, 0.0 } }).Collect(1)).First();
+            double truthTable2 = (await andGatePerceptron.PipeFlow(null, new[] { new[] { 0.0, 1.0 } }).Collect(1)).First();
+            double truthTable3 = (await andGatePerceptron.PipeFlow(null, new[] { new[] { 1.0, 0.0 } }).Collect(1)).First();
+            double truthTable4 = (await andGatePerceptron.PipeFlow(null, new[] { new[] { 1.0, 1.0 } }).Collect(1)).First();
 
             return truthTable1 == 0.0
                 && truthTable2 == 0.0
@@ -568,18 +569,18 @@ namespace FlowAI
             // The perceptron will spend 100 epochs with a learning rate of 0.01 for each size-2 training example
             var perceptron = new FlowPerceptron(nInputs: 2, bufferEpochs: 100, bufferLearningRate: 0.01);
             // We're going to test binary gates, so these are our test inputs
-            var testSequence = new FlowSequence<double>(new[]
+            var testSequence = new FlowSequence<double[]>(new[]
             {
-                0.0, 0.0,
-                0.0, 1.0,
-                1.0, 0.0,
-                1.0, 1.0
+                new[]{ 0.0, 0.0 },
+                new[]{ 0.0, 1.0 },
+                new[]{ 1.0, 0.0 },
+                new[]{ 1.0, 1.0 }
             });
             // The first training sequence is a binary AND gate
-            var trainingSequence = new FlowSequence<(double[], double)>(new[] {
+            var trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
                 (new[]{ 0.0, 0.0 }, 0.0),
-                (new[]{ 0.0, 1.0 }, 0.0),
                 (new[]{ 1.0, 0.0 }, 0.0),
+                (new[]{ 0.0, 1.0 }, 0.0),
                 (new[]{ 1.0, 1.0 }, 1.0)
             });
             // The perceptron is trained by filling its dedicated TrainingBuffer first
@@ -588,22 +589,50 @@ namespace FlowAI
                     trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count)
             // Then it is used to make predictions by piping the test sequence into it
                 ).Redirect(
-                    perceptron.PipeFlow(testSequence, 
+                    perceptron.PipeFlow(testSequence,
                         testSequence.Flow(maxDroplets: testSequence.Sequence.Count)
                     )
                 );
             // If the perceptron works, then its predictions should be the same as the training examples
-            bool ret = (await trainAndPredict().Collect()).SequenceEqual(trainingSequence.Sequence.Select(s => s.Item2));
+            bool ret = (await trainAndPredict().Collect()).SequenceEqual(trainingSequence.Sequence.Select(s => s.Output));
             // And if it really works, then we should be able to retrain it to an OR gate and verify that it adapted
-            trainingSequence = new FlowSequence<(double[], double)>(new[] {
+            trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
                 (new[]{ 0.0, 0.0 }, 0.0),
-                (new[]{ 0.0, 1.0 }, 1.0),
                 (new[]{ 1.0, 0.0 }, 1.0),
+                (new[]{ 0.0, 1.0 }, 1.0),
                 (new[]{ 1.0, 1.0 }, 1.0)
             });
 
-            ret &= (await trainAndPredict().Collect()).SequenceEqual(trainingSequence.Sequence.Select(s => s.Item2));
+            ret &= (await trainAndPredict().Collect()).SequenceEqual(trainingSequence.Sequence.Select(s => s.Output));
             return ret;
+        }
+        // Creates an even more advanced perceptron that incrementally becomes better at predicting a result
+        static async Task<bool> TestPerceptron3()
+        {
+            // The perceptron will spend 100 epochs with a learning rate of 0.01 for each size-4 training example
+            var perceptron = new FlowPerceptron(nInputs: 4, bufferEpochs: 100, bufferLearningRate: 0.01);
+            // We're going to test binary numbers in the 0-15 range
+            var inputSequence = new FlowSequence<double[]>(new[]
+            {
+                new[]{ 0.0, 0.0, 0.0, 0.0 },
+                new[]{ 0.0, 0.0, 0.0, 1.0 },
+                new[]{ 0.0, 0.0, 1.0, 0.0 },
+                new[]{ 0.0, 0.0, 1.0, 1.0 },
+                new[]{ 0.0, 1.0, 0.0, 0.0 },
+                new[]{ 0.0, 1.0, 0.0, 1.0 },
+                new[]{ 0.0, 1.0, 1.0, 0.0 },
+                new[]{ 0.0, 1.0, 1.0, 1.0 },
+                new[]{ 1.0, 0.0, 0.0, 0.0 },
+                new[]{ 1.0, 0.0, 0.0, 1.0 },
+                new[]{ 1.0, 0.0, 1.0, 0.0 },
+                new[]{ 1.0, 0.0, 1.0, 1.0 },
+                new[]{ 1.0, 1.0, 0.0, 0.0 },
+                new[]{ 1.0, 1.0, 0.0, 1.0 },
+                new[]{ 1.0, 1.0, 1.0, 0.0 },
+                new[]{ 1.0, 1.0, 1.0, 1.0 }
+            });
+
+            return false;
         }
     }
 }

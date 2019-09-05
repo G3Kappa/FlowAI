@@ -9,23 +9,23 @@ namespace FlowAI.Producers.Plumbing
     /// <summary>
     /// Abstract class for an output junction, which can't offer an equivalent base implementation to a FlowInputJunction.
     /// </summary>
-    public abstract class FlowOutputJunctionBase<T> : FlowProducerBase<T>
+    public abstract class FlowOutputJunctionBase<TInput, TOutput> : FlowProducerBase<TOutput>
     {
-        public IProducerConsumerCollection<Func<IAsyncEnumerator<T>>> FlowStarters { get; }
-        public IProducerConsumerCollection<IAsyncEnumerator<T>> OpenFlows { get; private set; }
+        public IProducerConsumerCollection<Func<IAsyncEnumerator<TInput>>> FlowStarters { get; }
+        public IProducerConsumerCollection<IAsyncEnumerator<TInput>> OpenFlows { get; private set; }
 
-        public FlowOutputJunctionBase(params Func<IAsyncEnumerator<T>>[] flows)
+        public FlowOutputJunctionBase(params Func<IAsyncEnumerator<TInput>>[] flows)
         {
-            FlowStarters = new ConcurrentQueue<Func<IAsyncEnumerator<T>>>(flows);
-            OpenFlows = new ConcurrentQueue<IAsyncEnumerator<T>>(flows.Select(f => f()).ToArray());
+            FlowStarters = new ConcurrentQueue<Func<IAsyncEnumerator<TInput>>>(flows);
+            OpenFlows = new ConcurrentQueue<IAsyncEnumerator<TInput>>(flows.Select(f => f()).ToArray());
         }
 
-        public IAsyncEnumerator<T>[] GetFlows()
+        public IAsyncEnumerator<TInput>[] GetFlows()
         {
-            int i = 0; var ret = new IAsyncEnumerator<T>[FlowStarters.Count];
-            foreach (IAsyncEnumerator<T> flow in OpenFlows)
+            int i = 0; var ret = new IAsyncEnumerator<TInput>[FlowStarters.Count];
+            foreach (IAsyncEnumerator<TInput> flow in OpenFlows)
             {
-                ret[i] = flow is AsyncEnumerator<T> inst && inst.IsEnumerationComplete 
+                ret[i] = flow is AsyncEnumerator<TInput> inst && inst.IsEnumerationComplete 
                     ? FlowStarters.ElementAt(i)() : OpenFlows.ElementAt(i);
                 i++;
             }

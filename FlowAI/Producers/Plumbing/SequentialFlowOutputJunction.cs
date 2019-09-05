@@ -10,7 +10,7 @@ namespace FlowAI.Producers.Plumbing
     /// <summary>
     /// Merges the flow of a number of producers into a single Flow by exhausting each flow sequentially in the order they were provided.
     /// </summary>
-    public class SequentialFlowOutputJunction<T> : FlowOutputJunctionBase<T>
+    public class SequentialFlowOutputJunction<T> : FlowOutputJunctionBase<T, T>
     {
         public int Current { get; protected set; } = 0;
         public override bool IsFlowStarted => base.IsFlowStarted && FlowStarters != null && FlowStarters.Count > 0;
