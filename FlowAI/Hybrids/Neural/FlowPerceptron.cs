@@ -18,6 +18,12 @@ namespace FlowAI.Hybrids.Neural
         {
             return 1.0 / (1 + Math.Pow(Math.E, -x));
         }
+
+        public static double SigmoidDerivative(double x)
+        {
+            var fX = Sigmoid(x);
+            return fX * (1 - fX);
+        }
     }
 
     /// <summary>
@@ -34,10 +40,11 @@ namespace FlowAI.Hybrids.Neural
         /// If the training buffer contains a droplet, the next input data will be considered an example with that droplet as the known answer.
         /// </summary>
         public FlowBuffer<(double[], double)> TrainingBuffer { get; protected set; }
-        public int TrainingBufferEpochs { get; private set; }
-        public double TrainingBufferLearningRate { get; private set; }
-
+        public int TrainingBufferEpochs { get; set; }
+        public double TrainingBufferLearningRate { get; set; }
         public int TotalTimesTrained { get; private set; }
+
+        public int OutputsReady => OutputBuffer.Contents.Count;
 
         /// <summary>
         /// Trains the perceptron on a dataset so that it can be used in a flow network.
@@ -45,24 +52,22 @@ namespace FlowAI.Hybrids.Neural
         /// <param name="dataset">A list of tuples containing the input->output examples for this dataset.</param>
         /// <param name="epochs">The number of epochs to train for.</param>
         /// <param name="learningRate">The learning rate coefficient.</param>
-        public void Train(IEnumerable<(double[], double)> dataset, int epochs = 1, double learningRate = 1)
+        /// <returns>The total error</returns>
+        public double Train(IEnumerable<(double[], double)> dataset, int epochs = 1, double learningRate = 1)
         {
+            double globalError = 0;
             for (int i = 0; i < epochs; i++)
             {
-                foreach ((double[] input, double output) in dataset)
+                foreach ((double[] input, double target) in dataset)
                 {
                     TotalTimesTrained++;
                     double prediction = Activate(input)[0]; // Can be 1 or 0
-                    if(output > prediction)
-                    {
-                        Weights = new[] { Weights[0] - learningRate }.Concat(Weights.Skip(1).Select((w, wi) => w + learningRate * input[wi])).ToArray();
-                    }
-                    else if(output < prediction)
-                    {
-                        Weights = new[] { Weights[0] + learningRate }.Concat(Weights.Skip(1).Select((w, wi) => w - learningRate * input[wi])).ToArray();
-                    }
+                    var error = (target - prediction) * ActivationFunctions.SigmoidDerivative(prediction);
+                    Weights = new[] { Weights[0] - error * learningRate }.Concat(Weights.Skip(1).Select((w, wi) => w + learningRate * error * input[wi])).ToArray();
+                    globalError += error;
                 }
             }
+            return globalError;
         }
 
         protected double[] Activate(double[] input)
@@ -73,12 +78,12 @@ namespace FlowAI.Hybrids.Neural
 
         public override async Task Update(FlowBuffer<double[]> inBuf, FlowBuffer<double> outBuf)
         {
-            await base.Update(inBuf, outBuf);
             if(!TrainingBuffer.Empty)
             {
                 var dataset = await TrainingBuffer.Flow().Collect();
                 Train(dataset, TrainingBufferEpochs, TrainingBufferLearningRate);
             }
+            await base.Update(inBuf, outBuf);
         }
 
         private void InitializeWeights(double[] w)
@@ -90,7 +95,8 @@ namespace FlowAI.Hybrids.Neural
             }
         }
 
-        public FlowPerceptron(int nInputs, Func<double, double> activation = null, int bufferEpochs = 1, double bufferLearningRate = 1.0) : base(null, (i, o) => i.Length == nInputs, nInputs)
+        public FlowPerceptron(int nInputs, Func<double, double> activation = null, int bufferEpochs = 1, double bufferLearningRate = 1.0) 
+            : base(null, (i, o) => i.Length == 1, nInputs)
         {
             Weights = new double[nInputs + 1];
             InitializeWeights(Weights);

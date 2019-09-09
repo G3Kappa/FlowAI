@@ -1,4 +1,5 @@
-﻿using FlowAI.Hybrids.Buffers;
+﻿using FlowAI.Exceptions;
+using FlowAI.Hybrids.Buffers;
 using FlowAI.Producers;
 using System;
 using System.Collections.Async;

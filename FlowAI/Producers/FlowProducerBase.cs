@@ -35,7 +35,7 @@ namespace FlowAI.Producers
         /// <param name="restart">If false, the flow must then be manually restarted to indicate that error handling took place.</param>
         public async Task<bool> InterruptFlow(FlowInterruptedException<T> reason = null, bool restart = false)
         {
-            if(IsFlowStarted&& await StaunchFlow())
+            if(IsFlowStarted && await StaunchFlow())
             {
                 Flow().Dispose();
 
@@ -80,7 +80,7 @@ namespace FlowAI.Producers
                         await yield.ReturnAsync(ret);
                     }
 
-                    if (!self.IsOpen || --maxDroplets == 0 || stop != null && stop(ret))
+                    if (!self.IsOpen || --maxDroplets == 0 || (stop != null && stop(ret)))
                     {
                         yield.Break();
                     }

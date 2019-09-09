@@ -36,7 +36,7 @@ namespace FlowAI.Hybrids.Buffers
                 while (true)
                 {
                     if (Queue.TryDequeue(out T ret)) return ret;
-                    Task.Run(async () => await InterruptFlow(new FlowInterruptedException<T>(this, "Drip", fatal: true))).Wait();
+                    Task.Run(async () => await InterruptFlow(new FlowInterruptedException<T>(this, "FlowBuffer::Drip", fatal: true))).Wait();
                 }
             });
         }

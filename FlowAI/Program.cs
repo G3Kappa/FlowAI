@@ -24,17 +24,59 @@ using System.Threading.Tasks;
 
 namespace FlowAI
 {
-    class Program
+    [AttributeUsage(AttributeTargets.Method)]
+    class RepeatAttribute : Attribute
     {
-        private static async Task<(int Passed, int Total)> RunTest(string name, Task<bool> testToAwait, int passed_tests, int total_tests)
+        /// <summary>
+        /// How many times to repeat this test.
+        /// </summary>
+        public int Times { get; }
+        /// <summary>
+        /// How many times to repeat this test when the debugger is attached.
+        /// </summary>
+        public int DebugTimes { get; set; }
+        public RepeatAttribute(int times)
+        {
+            Times = times;
+            DebugTimes = times;
+        }
+    }
+
+
+    [AttributeUsage(AttributeTargets.Method)]
+    class MayFailAttribute : Attribute { }
+
+    [AttributeUsage(AttributeTargets.Method)]
+    class SkipAttribute : Attribute { }
+
+    class Program
+     {
+        private static async Task<(int Passed, int Total)> RunTest(string name, Func<Task<bool>> testToAwait, int passed_tests, int total_tests)
         {
             var stopwatch = new Stopwatch();
             stopwatch.Start();
-            Console.Write($"{name}: ");
-            bool ret = await testToAwait;
-            Console.WriteLine($"{stopwatch.Elapsed.TotalSeconds:0.000}s. ({(ret ? "PASS" : "FAIL")})");
+
+            var repeatAttr = (RepeatAttribute)testToAwait.Method.GetCustomAttributes(typeof(RepeatAttribute), false).FirstOrDefault();
+
+            int repeat = repeatAttr != null ? (Debugger.IsAttached ? repeatAttr.DebugTimes : repeatAttr.Times) : 0;
+            bool mayFail = testToAwait.Method.GetCustomAttributes(typeof(MayFailAttribute), false).FirstOrDefault() != null;
+            bool skip = testToAwait.Method.GetCustomAttributes(typeof(SkipAttribute), false).FirstOrDefault() != null;
+
+            Console.Write($"{name}: (x01) ");
+            bool ret = skip || await testToAwait();
+            for (int i = 0; !skip && ret && i < repeat; i++)
+            {
+                Console.Write($"\r{name}: (x{i + 2:00}) ");
+                ret &= await testToAwait();
+            }
+
+            var verb = ret ? "PASS" : "FAIL";
+            verb = mayFail && !ret ? "WARN" : verb;
+            verb = skip ? "SKIP" : verb;
+
+            Console.WriteLine($"{stopwatch.Elapsed.TotalSeconds:0.000}s. ({verb})");
             stopwatch.Stop();
-            return (passed_tests + (ret ? 1 : 0), total_tests + 1);
+            return (passed_tests + (ret || mayFail ? 1 : 0), total_tests + 1);
         }
 
         static async Task Main(string[] _)
@@ -43,28 +85,29 @@ namespace FlowAI
             var stopwatch = new Stopwatch();
             stopwatch.Start();
             int passed_tests = 0; int total_tests = 0;
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowConstant -> FlowBuffer ", TestConstToBuf(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowInputJunction          ", TestInputJunctions1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowInputJunction ", TestSplittingInputJunctions1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SequentialFlowInputJunction", TestSequentialInputJunctions1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: DropletMapper w/ PipeFlow()", TestMapWithPipe(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowSensor (takes a while) ", TestSensors1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Max&MinDropletBuffers      ", TestMaxMinBuffers(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowMapper                 ", TestFlowMapper(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowTransformer<int,string>", TestDropletTransformers1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: CSV file to dynamic objects", ParseCsvToDynamicObjects(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowFilter                 ", TestFlowFilter(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowOutputJunction", TestSplittingOutputJunctions1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: ReducingFlowOutputJunction ", TestReducingOutputJunctions(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Fibonacci w/ Recursive Pipe", TestFibonacciScenario(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowAdapter<FileStream,_>  ", TestStreamAdapters1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FileStreamFlowAdapter      ", TestStreamAdapters2(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Network Adapters (may fail)", TestStreamAdapters3(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: String rewriting engine    ", TestStringRewritingMachine(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Binary function evaluator  ", TestBinaryCircuit(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Perceptron-based AND Gate  ", TestPerceptron1(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Percepton Flow interfaces  ", TestPerceptron2(), passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Percepton Flow autolearner ", TestPerceptron3(), passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowConstant -> FlowBuffer ", TestConstToBuf, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowInputJunction          ", TestInputJunctions1, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowInputJunction ", TestSplittingInputJunctions1, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SequentialFlowInputJunction", TestSequentialInputJunctions1, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: DropletMapper w/ PipeFlow()", TestMapWithPipe, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowSensor (takes a while) ", TestSensors1, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Max&MinDropletBuffers      ", TestMaxMinBuffers, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowMapper                 ", TestFlowMapper, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowTransformer<int,string>", TestDropletTransformers1, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: CSV file to dynamic objects", ParseCsvToDynamicObjects, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowFilter                 ", TestFlowFilter, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowOutputJunction", TestSplittingOutputJunctions1, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: ReducingFlowOutputJunction ", TestReducingOutputJunctions, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Fibonacci w/ Recursive Pipe", TestFibonacciScenario, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowAdapter<FileStream,_>  ", TestStreamAdapters1, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FileStreamFlowAdapter      ", TestStreamAdapters2, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Network Adapters (may fail)", TestStreamAdapters3, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: String rewriting engine    ", TestStringRewritingMachine, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Binary function evaluator  ", TestBinaryCircuit, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Perceptron-based Logic Gate", TestPerceptron1, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Percepton Flow interfaces  ", TestPerceptron2, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Individual Percepton Layer ", TestPerceptron3, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Percepton Network (XOR)    ", TestPerceptron4, passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -338,6 +381,7 @@ namespace FlowAI
             return ret.SequenceEqual("Hello my dudes!");
         }
         // Adapts socket streams and tests that they work. Sometimes it fails, but rerunning this test seems to fix it.
+        [MayFail]
         static async Task<bool> TestStreamAdapters3()
         {
             const int PORT = 5555;
@@ -408,7 +452,7 @@ namespace FlowAI
             );
             // Create a transformer that takes the parser's output and creates a list of custom objects
             // It expects a string[] header and one or more string[] data droplets
-            var instantiator = new FlowTransformer<string[], object>(
+            var instantiator = new FlowTransformer<string[], ExpandoObject>(
                 (input) =>
                 {
                     string[] header = input.Take(1).First();
@@ -431,7 +475,7 @@ namespace FlowAI
                 chunkSize: 4096
             );
             // Pipe everything together and you have a CSV file parser
-            IProducerConsumerCollection<object> objects =
+            IProducerConsumerCollection<ExpandoObject> objects =
                 await instantiator.PipeFlow(
                     commaSplitter, commaSplitter.PipeFlow(
                         newlineAggregator, newlineAggregator.PipeFlow(
@@ -542,38 +586,77 @@ namespace FlowAI
                 return new ReducingFlowOutputJunction<bool>(op, flows);
             }
         }
-        // Creates a pre-trained perceptron-based AND gate and tests that it works
+        // Creates a pre-trained perceptron-based binary gate and tests that it works
+        [Repeat(times: 98, DebugTimes = 9)]
         static async Task<bool> TestPerceptron1()
         {
-            var andGatePerceptron = new FlowPerceptron(nInputs: 2);
-            andGatePerceptron.Train(new[] {
+            const int epochs = 100;
+            const double lr = 0.1;
+
+            var perceptron = new FlowPerceptron(nInputs: 2);
+
+            // Train against an AND gate and tests that it works
+            var trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
                 (new[]{ 0.0, 0.0 }, 0.0),
-                (new[]{ 0.0, 1.0 }, 0.0),
                 (new[]{ 1.0, 0.0 }, 0.0),
-                (new[]{ 1.0, 1.0 }, 1.0),
-            }, epochs: 100, learningRate: 0.01);
+                (new[]{ 0.0, 1.0 }, 0.0),
+                (new[]{ 1.0, 1.0 }, 1.0)
+            });
+            perceptron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
 
-            double truthTable1 = (await andGatePerceptron.PipeFlow(null, new[] { new[] { 0.0, 0.0 } }).Collect(1)).First();
-            double truthTable2 = (await andGatePerceptron.PipeFlow(null, new[] { new[] { 0.0, 1.0 } }).Collect(1)).First();
-            double truthTable3 = (await andGatePerceptron.PipeFlow(null, new[] { new[] { 1.0, 0.0 } }).Collect(1)).First();
-            double truthTable4 = (await andGatePerceptron.PipeFlow(null, new[] { new[] { 1.0, 1.0 } }).Collect(1)).First();
+            Func<Task<bool>> predictAndCheck = async () => (await perceptron.PipeFlow(null,
+                trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count).Select(x => x.Inputs)
+            )
+            .Collect())
+            .SequenceEqual(trainingSequence.Sequence.Select(s => s.Output));
+            bool ret = await predictAndCheck();
 
-            return truthTable1 == 0.0
-                && truthTable2 == 0.0
-                && truthTable3 == 0.0
-                && truthTable4 == 1.0;
+            // Retrain against an OR gate and tests that it works
+            trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
+                (new[]{ 0.0, 0.0 }, 0.0),
+                (new[]{ 1.0, 0.0 }, 1.0),
+                (new[]{ 0.0, 1.0 }, 1.0),
+                (new[]{ 1.0, 1.0 }, 1.0)
+            });
+            perceptron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
+            ret &= await predictAndCheck();
+
+            // Retrain against a NAND gate and tests that it works
+            trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
+                (new[]{ 0.0, 0.0 }, 1.0),
+                (new[]{ 1.0, 0.0 }, 1.0),
+                (new[]{ 0.0, 1.0 }, 1.0),
+                (new[]{ 1.0, 1.0 }, 0.0)
+            });
+            perceptron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
+            ret &= await predictAndCheck();
+
+            // Retrain against a NOR gate and tests that it works
+            trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
+                (new[]{ 0.0, 0.0 }, 1.0),
+                (new[]{ 1.0, 0.0 }, 0.0),
+                (new[]{ 0.0, 1.0 }, 0.0),
+                (new[]{ 1.0, 1.0 }, 0.0)
+            });
+            perceptron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
+            ret &= await predictAndCheck();
+
+            return ret;
         }
         // Creates a more advanced perceptron that is trained from another flow component
+        [Repeat(times: 98, DebugTimes = 9)]
         static async Task<bool> TestPerceptron2()
         {
-            // The perceptron will spend 100 epochs with a learning rate of 0.01 for each size-2 training example
-            var perceptron = new FlowPerceptron(nInputs: 2, bufferEpochs: 100, bufferLearningRate: 0.01);
+            const int epochs = 1000;
+            const double lr = 0.1;
+
+            var perceptron = new FlowPerceptron(nInputs: 2, bufferEpochs: epochs, bufferLearningRate: lr);
             // We're going to test binary gates, so these are our test inputs
             var testSequence = new FlowSequence<double[]>(new[]
             {
                 new[]{ 0.0, 0.0 },
-                new[]{ 0.0, 1.0 },
                 new[]{ 1.0, 0.0 },
+                new[]{ 0.0, 1.0 },
                 new[]{ 1.0, 1.0 }
             });
             // The first training sequence is a binary AND gate
@@ -586,53 +669,95 @@ namespace FlowAI
             // The perceptron is trained by filling its dedicated TrainingBuffer first
             Func<IAsyncEnumerator<double>> trainAndPredict = () =>
                 perceptron.TrainingBuffer.ConsumeFlow(trainingSequence,
-                    trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count)
+                    trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count))
             // Then it is used to make predictions by piping the test sequence into it
-                ).Redirect(
+                .Redirect(
                     perceptron.PipeFlow(testSequence,
-                        testSequence.Flow(maxDroplets: testSequence.Sequence.Count)
-                    )
-                );
+                        testSequence.Flow(maxDroplets: testSequence.Sequence.Count)));
             // If the perceptron works, then its predictions should be the same as the training examples
             bool ret = (await trainAndPredict().Collect()).SequenceEqual(trainingSequence.Sequence.Select(s => s.Output));
-            // And if it really works, then we should be able to retrain it to an OR gate and verify that it adapted
-            trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
-                (new[]{ 0.0, 0.0 }, 0.0),
-                (new[]{ 1.0, 0.0 }, 1.0),
-                (new[]{ 0.0, 1.0 }, 1.0),
-                (new[]{ 1.0, 1.0 }, 1.0)
-            });
+            ret &= perceptron.TotalTimesTrained == epochs * trainingSequence.Sequence.Count;
 
-            ret &= (await trainAndPredict().Collect()).SequenceEqual(trainingSequence.Sequence.Select(s => s.Output));
             return ret;
         }
-        // Creates an even more advanced perceptron that incrementally becomes better at predicting a result
+        // Creates a simple layer of neurons
         static async Task<bool> TestPerceptron3()
         {
-            // The perceptron will spend 100 epochs with a learning rate of 0.01 for each size-4 training example
-            var perceptron = new FlowPerceptron(nInputs: 4, bufferEpochs: 100, bufferLearningRate: 0.01);
-            // We're going to test binary numbers in the 0-15 range
-            var inputSequence = new FlowSequence<double[]>(new[]
+            const int epochs = 1000;
+            const double lr = 0.1;
+
+            var layer = new FlowPerceptronLayer(
+                nInputs: 2,
+                nNeurons: 3,
+                learningRate: lr,
+                trainingEpochs: epochs
+            );
+
+            var testSequence = new FlowSequence<double[]>(new[]
             {
-                new[]{ 0.0, 0.0, 0.0, 0.0 },
-                new[]{ 0.0, 0.0, 0.0, 1.0 },
-                new[]{ 0.0, 0.0, 1.0, 0.0 },
-                new[]{ 0.0, 0.0, 1.0, 1.0 },
-                new[]{ 0.0, 1.0, 0.0, 0.0 },
-                new[]{ 0.0, 1.0, 0.0, 1.0 },
-                new[]{ 0.0, 1.0, 1.0, 0.0 },
-                new[]{ 0.0, 1.0, 1.0, 1.0 },
-                new[]{ 1.0, 0.0, 0.0, 0.0 },
-                new[]{ 1.0, 0.0, 0.0, 1.0 },
-                new[]{ 1.0, 0.0, 1.0, 0.0 },
-                new[]{ 1.0, 0.0, 1.0, 1.0 },
-                new[]{ 1.0, 1.0, 0.0, 0.0 },
-                new[]{ 1.0, 1.0, 0.0, 1.0 },
-                new[]{ 1.0, 1.0, 1.0, 0.0 },
-                new[]{ 1.0, 1.0, 1.0, 1.0 }
+                new[]{ 0.0, 0.0 },
+                new[]{ 0.0, 1.0 },
+                new[]{ 1.0, 0.0 },
+                new[]{ 1.0, 1.0 }
             });
 
-            return false;
+            var trainingSequence = new FlowSequence<(double[] Inputs, double[] Output)>(new[] {
+                (new[]{ 0.0, 0.0 }, new []{ 0.0, 1.0, 0.0 }),
+                (new[]{ 1.0, 0.0 }, new []{ 1.0, 0.0, 0.0 }),
+                (new[]{ 0.0, 1.0 }, new []{ 1.0, 0.0, 0.0 }),
+                (new[]{ 1.0, 1.0 }, new []{ 1.0, 0.0, 1.0 })
+            });
+
+            // Exactly the same interface as individual perceptrons
+
+            Func<IAsyncEnumerator<double[]>> trainAndPredict = () =>
+                layer.TrainingBuffer.ConsumeFlow(trainingSequence,
+                    trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count))
+                .Redirect(
+                    layer.PipeFlow(testSequence,
+                        testSequence.Flow(maxDroplets: testSequence.Sequence.Count)));
+
+            var pred = (await trainAndPredict().Collect());
+            bool ret = pred.Select((p, i) => p.SequenceEqual(trainingSequence.Sequence[i].Output)).All(x => x);
+
+            return ret;
+        }
+        // Creates a pre-trained perceptron-based XOR gate and tests that it works (requires a 2-1 network)
+        static async Task<bool> TestPerceptron4()
+        {
+            var network = new FlowPerceptronNetwork(
+                nInputs: 2,
+                nNeurons: new[] { 2, 1 },
+                learningRate: 0.01,
+                trainingEpochs: 1000
+            );
+
+            var testSequence = new FlowSequence<double[]>(new[]
+            {
+                new[]{ 0.0, 0.0 },
+                new[]{ 0.0, 1.0 },
+                new[]{ 1.0, 0.0 },
+                new[]{ 1.0, 1.0 }
+            });
+
+            var trainingSequence = new FlowSequence<(double[] Inputs, double[] Output)>(new[] {
+                (new[]{ 0.0, 0.0 }, new []{ 0.0 }),
+                (new[]{ 1.0, 0.0 }, new []{ 1.0 }),
+                (new[]{ 0.0, 1.0 }, new []{ 1.0 }),
+                (new[]{ 1.0, 1.0 }, new []{ 0.0 })
+            });
+
+            await network.Train(trainingSequence.Sequence, epochs: 100, learningRate: 0.01);
+
+            bool ret = (
+                await network.PipeFlow(
+                    testSequence,
+                    testSequence.Flow(maxDroplets: testSequence.Sequence.Count)
+                ).Collect()
+                ).SequenceEqual(trainingSequence.Sequence.Select(s => s.Output));
+
+
+            return ret;
         }
     }
 }

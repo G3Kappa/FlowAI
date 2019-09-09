@@ -27,15 +27,12 @@ namespace FlowAI.Hybrids
                 await flow.ForEachAsync(async t =>
                 {
                     await ConsumeDroplet(producer, t);
-                    if (IsFlowStarted) // Don't deadlock if e.g. the output buffer is empty
+                    TOutput ret = await Drip();
+                    if (!IsFlowStarted || (stop?.Invoke(ret) ?? false) || --maxDroplets == 0)
                     {
-                        TOutput ret = await Drip();
-                        if((stop?.Invoke(ret) ?? false) || --maxDroplets == 0)
-                        {
-                            yield.Break();
-                        }
-                        await yield.ReturnAsync(ret);
+                        yield.Break();
                     }
+                    await yield.ReturnAsync(ret);
                 });
             });
         }

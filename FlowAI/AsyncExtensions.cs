@@ -132,6 +132,20 @@ namespace FlowAI
         }
 
         /// <summary>
+        /// Transforms the elements of an IAsyncEnumerator.
+        /// </summary>
+        public static IAsyncEnumerator<U> Map<T, U>(this IAsyncEnumerator<T> e, Func<T, U> mapping)
+        {
+            return new AsyncEnumerator<U>(async yield =>
+            {
+                while (await e.MoveNextAsync())
+                {
+                    await yield.ReturnAsync(mapping(e.Current));
+                }
+            });
+        }
+
+        /// <summary>
         /// Appends a second enumerator at the end of the current enumerator, then returns the second enumerator.
         /// The current enumerator will always run to completion before the appended enumerator can start.
         /// </summary>
