@@ -104,10 +104,10 @@ namespace FlowAI
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Network Adapters (may fail)", TestStreamAdapters3, passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: String rewriting engine    ", TestStringRewritingMachine, passed_tests, total_tests);
             (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Binary function evaluator  ", TestBinaryCircuit, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Perceptron-based Logic Gate", TestPerceptron1, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Percepton Flow interfaces  ", TestPerceptron2, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Individual Percepton Layer ", TestPerceptron3, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Percepton Network (XOR)    ", TestPerceptron4, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Neuron-based Logic Gate    ", TestNeuron1, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Neural Flow interfaces     ", TestNeuron2, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Individual Neuron Layer    ", TestNeuron3, passed_tests, total_tests);
+            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Neurons and real numbers   ", TestNeuron4, passed_tests, total_tests);
             stopwatch.Stop();
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
             Console.ReadKey();
@@ -586,14 +586,14 @@ namespace FlowAI
                 return new ReducingFlowOutputJunction<bool>(op, flows);
             }
         }
-        // Creates a pre-trained perceptron-based binary gate and tests that it works
+        // Creates a pre-trained neuron-based binary gate and tests that it works
         [Repeat(times: 98, DebugTimes = 9)]
-        static async Task<bool> TestPerceptron1()
+        static async Task<bool> TestNeuron1()
         {
             const int epochs = 100;
-            const double lr = 0.1;
+            const double lr = 0.5;
 
-            var perceptron = new FlowPerceptron(nInputs: 2);
+            var neuron = new FlowNeuron(nInputs: 2);
 
             // Train against an AND gate and tests that it works
             var trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
@@ -602,12 +602,13 @@ namespace FlowAI
                 (new[]{ 0.0, 1.0 }, 0.0),
                 (new[]{ 1.0, 1.0 }, 1.0)
             });
-            perceptron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
+            neuron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
 
-            Func<Task<bool>> predictAndCheck = async () => (await perceptron.PipeFlow(null,
+            Func<Task<bool>> predictAndCheck = async () => (await neuron.PipeFlow(null,
                 trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count).Select(x => x.Inputs)
             )
             .Collect())
+            .Select(s => s > 0.5 ? 1.0 : 0.0)
             .SequenceEqual(trainingSequence.Sequence.Select(s => s.Output));
             bool ret = await predictAndCheck();
 
@@ -618,7 +619,7 @@ namespace FlowAI
                 (new[]{ 0.0, 1.0 }, 1.0),
                 (new[]{ 1.0, 1.0 }, 1.0)
             });
-            perceptron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
+            neuron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
             ret &= await predictAndCheck();
 
             // Retrain against a NAND gate and tests that it works
@@ -628,7 +629,7 @@ namespace FlowAI
                 (new[]{ 0.0, 1.0 }, 1.0),
                 (new[]{ 1.0, 1.0 }, 0.0)
             });
-            perceptron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
+            neuron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
             ret &= await predictAndCheck();
 
             // Retrain against a NOR gate and tests that it works
@@ -638,19 +639,19 @@ namespace FlowAI
                 (new[]{ 0.0, 1.0 }, 0.0),
                 (new[]{ 1.0, 1.0 }, 0.0)
             });
-            perceptron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
+            neuron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
             ret &= await predictAndCheck();
 
             return ret;
         }
-        // Creates a more advanced perceptron that is trained from another flow component
+        // Creates a more advanced neuron that is trained from another flow component
         [Repeat(times: 98, DebugTimes = 9)]
-        static async Task<bool> TestPerceptron2()
+        static async Task<bool> TestNeuron2()
         {
-            const int epochs = 1000;
-            const double lr = 0.1;
+            const int epochs = 100;
+            const double lr = 0.5;
 
-            var perceptron = new FlowPerceptron(nInputs: 2, bufferEpochs: epochs, bufferLearningRate: lr);
+            var neuron = new FlowNeuron(nInputs: 2, bufferEpochs: epochs, bufferLearningRate: lr);
             // We're going to test binary gates, so these are our test inputs
             var testSequence = new FlowSequence<double[]>(new[]
             {
@@ -666,27 +667,28 @@ namespace FlowAI
                 (new[]{ 0.0, 1.0 }, 0.0),
                 (new[]{ 1.0, 1.0 }, 1.0)
             });
-            // The perceptron is trained by filling its dedicated TrainingBuffer first
+            // The neuron is trained by filling its dedicated TrainingBuffer first
             Func<IAsyncEnumerator<double>> trainAndPredict = () =>
-                perceptron.TrainingBuffer.ConsumeFlow(trainingSequence,
+                neuron.TrainingBuffer.ConsumeFlow(trainingSequence,
                     trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count))
             // Then it is used to make predictions by piping the test sequence into it
                 .Redirect(
-                    perceptron.PipeFlow(testSequence,
+                    neuron.PipeFlow(testSequence,
                         testSequence.Flow(maxDroplets: testSequence.Sequence.Count)));
-            // If the perceptron works, then its predictions should be the same as the training examples
-            bool ret = (await trainAndPredict().Collect()).SequenceEqual(trainingSequence.Sequence.Select(s => s.Output));
-            ret &= perceptron.TotalTimesTrained == epochs * trainingSequence.Sequence.Count;
+            // If the neuron works, then its predictions should be the same as the training examples
+           
+            bool ret = (await trainAndPredict().Collect()).Select(s => s > 0.5 ? 1.0 : 0.0).SequenceEqual(trainingSequence.Sequence.Select(s => s.Output));
+            ret &= neuron.TotalTimesTrained == epochs * trainingSequence.Sequence.Count;
 
             return ret;
         }
         // Creates a simple layer of neurons
-        static async Task<bool> TestPerceptron3()
+        static async Task<bool> TestNeuron3()
         {
             const int epochs = 1000;
             const double lr = 0.1;
 
-            var layer = new FlowPerceptronLayer(
+            var layer = new FlowNeuronLayer(
                 nInputs: 2,
                 nNeurons: 3,
                 learningRate: lr,
@@ -708,7 +710,7 @@ namespace FlowAI
                 (new[]{ 1.0, 1.0 }, new []{ 1.0, 0.0, 1.0 })
             });
 
-            // Exactly the same interface as individual perceptrons
+            // Exactly the same interface as individual neurons
 
             Func<IAsyncEnumerator<double[]>> trainAndPredict = () =>
                 layer.TrainingBuffer.ConsumeFlow(trainingSequence,
@@ -718,44 +720,42 @@ namespace FlowAI
                         testSequence.Flow(maxDroplets: testSequence.Sequence.Count)));
 
             var pred = (await trainAndPredict().Collect());
-            bool ret = pred.Select((p, i) => p.SequenceEqual(trainingSequence.Sequence[i].Output)).All(x => x);
+            bool ret = pred.Select((p, i) => p.Select(s => s > 0.5 ? 1.0 : 0.0).SequenceEqual(trainingSequence.Sequence[i].Output)).All(x => x);
 
             return ret;
         }
-        // Creates a pre-trained perceptron-based XOR gate and tests that it works (requires a 2-1 network)
-        static async Task<bool> TestPerceptron4()
+        static async Task<bool> TestNeuron4()
         {
-            var network = new FlowPerceptronNetwork(
-                nInputs: 2,
-                nNeurons: new[] { 2, 1 },
-                learningRate: 0.01,
-                trainingEpochs: 1000
-            );
+            const int epochs = 1000;
+            const double lr = 0.5;
 
-            var testSequence = new FlowSequence<double[]>(new[]
-            {
-                new[]{ 0.0, 0.0 },
-                new[]{ 0.0, 1.0 },
-                new[]{ 1.0, 0.0 },
-                new[]{ 1.0, 1.0 }
+            var neuron = new FlowNeuron(nInputs: 3);
+
+            var trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
+                (new[]{ 0.0, 0.0, 0.0 }, 0.0),
+                (new[]{ 1.0, 0.0, 0.0 }, 0.0),
+                (new[]{ 0.0, 1.0, 0.0 }, 0.0),
+                (new[]{ 1.0, 1.0, 0.0 }, 0.0),
+                (new[]{ 0.0, 0.0, 1.0 }, 0.4),
+                (new[]{ 1.0, 0.0, 1.0 }, 0.6),
+                (new[]{ 0.0, 1.0, 1.0 }, 0.8),
+                (new[]{ 1.0, 1.0, 1.0 }, 1.0)
             });
 
-            var trainingSequence = new FlowSequence<(double[] Inputs, double[] Output)>(new[] {
-                (new[]{ 0.0, 0.0 }, new []{ 0.0 }),
-                (new[]{ 1.0, 0.0 }, new []{ 1.0 }),
-                (new[]{ 0.0, 1.0 }, new []{ 1.0 }),
-                (new[]{ 1.0, 1.0 }, new []{ 0.0 })
-            });
+            neuron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
 
-            await network.Train(trainingSequence.Sequence, epochs: 100, learningRate: 0.01);
+            var x = (await neuron.PipeFlow(null,
+                trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count).Select(x => x.Inputs)
+            )
+            .Collect());
 
-            bool ret = (
-                await network.PipeFlow(
-                    testSequence,
-                    testSequence.Flow(maxDroplets: testSequence.Sequence.Count)
-                ).Collect()
-                ).SequenceEqual(trainingSequence.Sequence.Select(s => s.Output));
-
+            Func<Task<bool>> predictAndCheck = async () => (await neuron.PipeFlow(null,
+                trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count).Select(x => x.Inputs)
+            )
+            .Collect())
+            .Select((s, i) => Math.Round(s, 1) - trainingSequence.Sequence[i].Output <= 0.05)
+            .All(x => x);
+            bool ret = await predictAndCheck();
 
             return ret;
         }

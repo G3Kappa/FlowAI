@@ -27,10 +27,10 @@ namespace FlowAI.Hybrids.Neural
     }
 
     /// <summary>
-    /// A simple perceptron that can be used to train a binary classifier.
+    /// A simple neuron that can be used to train a binary classifier.
     /// It needs to be trained on some data first. After that, its flow can be used to make predictions.
     /// </summary>
-    public class FlowPerceptron : FlowTransformer<double[], double>
+    public class FlowNeuron : FlowTransformer<double[], double>
     {
         public double[] Weights { get; private set; }
 
@@ -47,7 +47,7 @@ namespace FlowAI.Hybrids.Neural
         public int OutputsReady => OutputBuffer.Contents.Count;
 
         /// <summary>
-        /// Trains the perceptron on a dataset so that it can be used in a flow network.
+        /// Trains the neuron on a dataset so that it can be used in a flow network.
         /// </summary>
         /// <param name="dataset">A list of tuples containing the input->output examples for this dataset.</param>
         /// <param name="epochs">The number of epochs to train for.</param>
@@ -63,7 +63,7 @@ namespace FlowAI.Hybrids.Neural
                     TotalTimesTrained++;
                     double prediction = Activate(input)[0]; // Can be 1 or 0
                     var error = (target - prediction) * ActivationFunctions.SigmoidDerivative(prediction);
-                    Weights = new[] { Weights[0] - error * learningRate }.Concat(Weights.Skip(1).Select((w, wi) => w + learningRate * error * input[wi])).ToArray();
+                    Weights = new[] { Weights[0] + error * learningRate }.Concat(Weights.Skip(1).Select((w, wi) => w + learningRate * error * input[wi])).ToArray();
                     globalError += error;
                 }
             }
@@ -73,7 +73,7 @@ namespace FlowAI.Hybrids.Neural
         protected double[] Activate(double[] input)
         {
             double weightedSum = new[] { 1.0 }.Concat(input).Select((v, i) => Weights[i] * v).Sum();
-            return new[] { ActivationFunction(weightedSum) >= Weights[0] ? 1.0 : 0.0 };
+            return new[] { ActivationFunction(weightedSum) };
         }
 
         public override async Task Update(FlowBuffer<double[]> inBuf, FlowBuffer<double> outBuf)
@@ -95,7 +95,7 @@ namespace FlowAI.Hybrids.Neural
             }
         }
 
-        public FlowPerceptron(int nInputs, Func<double, double> activation = null, int bufferEpochs = 1, double bufferLearningRate = 1.0) 
+        public FlowNeuron(int nInputs, Func<double, double> activation = null, int bufferEpochs = 1, double bufferLearningRate = 1.0) 
             : base(null, (i, o) => i.Length == 1, nInputs)
         {
             Weights = new double[nInputs + 1];

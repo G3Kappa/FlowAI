@@ -95,9 +95,9 @@
     <Compile Include="Hybrids\Machines\FlowMachineBase.cs" />
     <Compile Include="Hybrids\Machines\DropletTransformer.cs" />
     <Compile Include="Hybrids\Machines\FlowTransformer.cs" />
-    <Compile Include="Hybrids\Neural\FlowPerceptronLayer.cs" />
-    <Compile Include="Hybrids\Neural\FlowPerceptronNetwork.cs" />
-    <Compile Include="Hybrids\Neural\FlowPerceptron.cs" />
+    <Compile Include="Hybrids\Neural\FlowNeuronLayer.cs" />
+    <Compile Include="Hybrids\Neural\FlowNeuralNetwork.cs" />
+    <Compile Include="Hybrids\Neural\FlowNeuron.cs" />
     <Compile Include="Hybrids\Sensors\FlowSensor.cs" />
     <Compile Include="Producers\FlowVariable.cs" />
     <Compile Include="Consumers\Plumbing\FlowInputJunction.cs" />

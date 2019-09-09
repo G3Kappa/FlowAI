@@ -12,18 +12,18 @@ using System.Threading.Tasks;
 namespace FlowAI.Hybrids.Neural
 {
     /// <summary>
-    /// A parallel arrangement of FlowPerceptrons, to be used in a FlowPerceptronNetwork.
+    /// A parallel arrangement of FlowNeurons, to be used in a FlowNeuronNetwork.
     /// </summary>
-    public class FlowPerceptronLayer : FlowTransformer<double[], double[]>
+    public class FlowNeuronLayer : FlowTransformer<double[], double[]>
     {
         public FlowBuffer<(double[], double[])> TrainingBuffer { get; protected set; }
 
         public int TrainingBufferEpochs { get; private set; }
         public double TrainingBufferLearningRate { get; private set; }
         public int TotalTimesTrained { get; private set; }
-        public FlowPerceptron[] Neurons { get; }
+        public FlowNeuron[] Neurons { get; }
 
-        public FlowPerceptronLayer(int nInputs, int nNeurons, double learningRate, int trainingEpochs, Func<double, double> activation = null)
+        public FlowNeuronLayer(int nInputs, int nNeurons, double learningRate, int trainingEpochs, Func<double, double> activation = null)
             : base(null, (i, o) => i.Length == nNeurons, 1)
         {
             TrainingBuffer = new FlowBuffer<(double[], double[])>();
@@ -31,7 +31,7 @@ namespace FlowAI.Hybrids.Neural
             TrainingBufferEpochs = trainingEpochs;
 
             Neurons = Enumerable.Range(0, nNeurons)
-                .Select(_ => new FlowPerceptron(nInputs, activation, trainingEpochs, learningRate))
+                .Select(_ => new FlowNeuron(nInputs, activation, trainingEpochs, learningRate))
                 .ToArray();
 
             var inputJ = new FlowInputJunction<double[]>(Neurons);

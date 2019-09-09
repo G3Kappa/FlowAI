@@ -14,17 +14,17 @@ namespace FlowAI.Hybrids.Neural
 {
 
     /// <summary>
-    /// A network of FlowPerceptrons arranged into an input layer, N hidden layers, and an output layer.
+    /// A network of FlowNeurons arranged into an input layer, N hidden layers, and an output layer.
     /// </summary>
-    public class FlowPerceptronNetwork : FlowTransformer<double[], double[]>
+    public class FlowNeuralNetwork : FlowTransformer<double[], double[]>
     {
-        public FlowPerceptronLayer[] Layers { get; set; }
+        public FlowNeuronLayer[] Layers { get; set; }
         public FlowBuffer<(double[], double[])> TrainingBuffer { get; protected set; }
         public int TrainingBufferEpochs { get; private set; }
         public double TrainingBufferLearningRate { get; private set; }
         public int TotalTimesTrained { get; private set; }
 
-        public FlowPerceptronNetwork(int nInputs, int[] nNeurons, double learningRate, int trainingEpochs, Func<double, double> activation = null) 
+        public FlowNeuralNetwork(int nInputs, int[] nNeurons, double learningRate, int trainingEpochs, Func<double, double> activation = null) 
             : base(null, (i, o) => i.Length == nNeurons.Last(), nInputs)
         {
             if(nNeurons == null || nNeurons.Length == 0)
@@ -36,7 +36,7 @@ namespace FlowAI.Hybrids.Neural
             TrainingBufferLearningRate = learningRate;
             TrainingBufferEpochs = trainingEpochs;
 
-            Layers = nNeurons.Select((n, i) => new FlowPerceptronLayer(i == 0 ? nInputs : nNeurons[i - 1], nNeurons[i], learningRate, trainingEpochs, activation))
+            Layers = nNeurons.Select((n, i) => new FlowNeuronLayer(i == 0 ? nInputs : nNeurons[i - 1], nNeurons[i], learningRate, trainingEpochs, activation))
                 .ToArray();
 
 
@@ -65,10 +65,23 @@ namespace FlowAI.Hybrids.Neural
                 // Backpropagation step
                 for (int j = 0; j < Layers.Length; j++)
                 {
-                    //var predictions = await Layers[j].PipeFlow(this, dataset.Select(d => d.Input).GetAsyncEnumerator()).Collect();
-
+                    var predictions = await Layers[j].PipeFlow(this, dataset.Select(d => d.Input).GetAsyncEnumerator()).Collect();
                 }
             }
+        }
+
+        private async Task BackpropErrors(int i, (double[], double[]) data, double[] prediction, double learningRate)
+        {
+            if(i < 0)
+            {
+                return;
+            }
+
+            var errors = data.Item2.Select((d, i) => (d - prediction[i]) * ActivationFunctions.SigmoidDerivative(prediction[i])).ToArray();
+            var newTargets = data.Item2.Select((d, i) => d + errors[i] * learningRate).ToArray();
+            Layers[i].Train(new[] { (data.Item1, newTargets) }, epochs: 1, learningRate: 1);
+
+            var newPredictions = (await Layers[i].PipeFlow(this, new[] { data.Item1 }).Collect()).ToArray();
         }
 
         public override async Task Update(FlowBuffer<double[]> inBuf, FlowBuffer<double[]> outBuf)
