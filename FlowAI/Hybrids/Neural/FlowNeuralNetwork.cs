@@ -24,6 +24,14 @@ namespace FlowAI.Hybrids.Neural
         public double TrainingBufferLearningRate { get; private set; }
         public int TotalTimesTrained { get; private set; }
 
+        internal void AdjustWeights(double[] input, double[][] error, double learningRate)
+        {
+            for (int i = 0; i < Layers.Length; i++)
+            {
+                Layers[i].AdjustWeights(input, error[i], learningRate);
+            }
+        }
+
         public FlowNeuralNetwork(int nInputs, int[] nNeurons, double learningRate, int trainingEpochs, Func<double, double> activation = null) 
             : base(null, (i, o) => i.Length == nNeurons.Last(), nInputs)
         {
@@ -59,29 +67,40 @@ namespace FlowAI.Hybrids.Neural
         public async Task Train(IEnumerable<(double[] Input, double[] Output)> dataset, int epochs = 1, double learningRate = 1)
         {
             var arr = dataset.ToArray();
+            var perLayerError = new List<double[]>();
+            var inputs = new List<double[]>();
+            var outputs = new List<double[]>();
             for (int i = 0; i < epochs; i++)
             {
                 TotalTimesTrained += arr.Length;
-                // Backpropagation step
-                for (int j = 0; j < Layers.Length; j++)
+                foreach (var d in arr)
                 {
-                    var predictions = await Layers[j].PipeFlow(this, dataset.Select(d => d.Input).GetAsyncEnumerator()).Collect();
+                    /*
+                     WARNING: TODO: TO COMPLETE
+                     */
+                    // Prediction step
+                    inputs.Add(d.Input);
+                    for (int j = 0; j < Layers.Length; j++)
+                    {
+                        var input = inputs.Last();
+                        var output = (await Layers[j].PipeFlow(this, new[] { input }.GetAsyncEnumerator()).Collect()).Single().ToArray();
+                        outputs.Add(output);
+                        inputs.Add(output);
+                    }
+                    inputs.RemoveAt(inputs.Count - 1);
+                    // Error for the datum's output and the last layer's output
+                    var err = d.Output.Select((o, _o) => (o - inputs.Last()[_o]) * ActivationFunctions.SigmoidDerivative(inputs.Last()[_o])).ToArray();
+                    // Backpropagation step
+                    Layers.Last().AdjustWeights(inputs[inputs.Count - 1], err, learningRate);
+                    for (int j = Layers.Length - 2; j >= 0; j--)
+                    {
+                        err = outputs[j + 1].Select((o, _o) => o * err[_o]).ToArray();
+                        Layers[j].AdjustWeights(inputs[j], err, learningRate);
+                    }
+                    inputs.Clear();
+                    outputs.Clear();
                 }
             }
-        }
-
-        private async Task BackpropErrors(int i, (double[], double[]) data, double[] prediction, double learningRate)
-        {
-            if(i < 0)
-            {
-                return;
-            }
-
-            var errors = data.Item2.Select((d, i) => (d - prediction[i]) * ActivationFunctions.SigmoidDerivative(prediction[i])).ToArray();
-            var newTargets = data.Item2.Select((d, i) => d + errors[i] * learningRate).ToArray();
-            Layers[i].Train(new[] { (data.Item1, newTargets) }, epochs: 1, learningRate: 1);
-
-            var newPredictions = (await Layers[i].PipeFlow(this, new[] { data.Item1 }).Collect()).ToArray();
         }
 
         public override async Task Update(FlowBuffer<double[]> inBuf, FlowBuffer<double[]> outBuf)

@@ -132,6 +132,14 @@ namespace FlowAI
         }
 
         /// <summary>
+        /// Collects the elements of an IAsyncEnumerator into a regular enumerable synchronously.
+        /// <returns></returns>
+        public static IProducerConsumerCollection<T> CollectSync<T>(this IAsyncEnumerator<T> e, int maxCount = 0)
+        {
+            return e.Collect(maxCount: maxCount).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
         /// Transforms the elements of an IAsyncEnumerator.
         /// </summary>
         public static IAsyncEnumerator<U> Map<T, U>(this IAsyncEnumerator<T> e, Func<T, U> mapping)

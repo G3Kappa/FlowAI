@@ -46,6 +46,11 @@ namespace FlowAI.Hybrids.Neural
 
         public int OutputsReady => OutputBuffer.Contents.Count;
 
+        internal void AdjustWeights(double[] input, double error, double learningRate)
+        {
+            Weights = new[] { Weights[0] + error * learningRate }.Concat(Weights.Skip(1).Select((w, wi) => w + learningRate * error * input[wi])).ToArray();
+        }
+
         /// <summary>
         /// Trains the neuron on a dataset so that it can be used in a flow network.
         /// </summary>
@@ -63,7 +68,7 @@ namespace FlowAI.Hybrids.Neural
                     TotalTimesTrained++;
                     double prediction = Activate(input)[0]; // Can be 1 or 0
                     var error = (target - prediction) * ActivationFunctions.SigmoidDerivative(prediction);
-                    Weights = new[] { Weights[0] + error * learningRate }.Concat(Weights.Skip(1).Select((w, wi) => w + learningRate * error * input[wi])).ToArray();
+                    AdjustWeights(input, error, learningRate);
                     globalError += error;
                 }
             }

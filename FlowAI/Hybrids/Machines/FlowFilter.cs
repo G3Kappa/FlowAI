@@ -33,10 +33,10 @@ namespace FlowAI.Hybrids.Machines
         {
             if (FilterSink != null && output.Length == 0)
             {
-                Task.Run(async () =>
+                Task.Run((Func<Task>)(async () =>
                 {
-                    await FilterSink.ConsumeFlow(InputBuffer, input.GetAsyncEnumerator()).Collect();
-                }).Wait();
+                    await AsyncExtensions.Collect<bool>(FilterSink.ConsumeFlow((Producers.IFlowProducer<T>)InputBuffer, (System.Collections.Async.IAsyncEnumerator<T>)input.GetAsyncEnumerator()));
+                })).Wait();
             }
 
             return base.OnInputTransformed(input, output);

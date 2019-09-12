@@ -17,6 +17,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,6 +25,17 @@ using System.Threading.Tasks;
 
 namespace FlowAI
 {
+    [AttributeUsage(AttributeTargets.Method)]
+    class TestAttribute : Attribute
+    {
+        public string Description { get; }
+
+        public TestAttribute(string desc)
+        {
+            Description = desc;
+        }
+    }
+
     [AttributeUsage(AttributeTargets.Method)]
     class RepeatAttribute : Attribute
     {
@@ -49,34 +61,72 @@ namespace FlowAI
     [AttributeUsage(AttributeTargets.Method)]
     class SkipAttribute : Attribute { }
 
-    class Program
+    public class Program
      {
-        private static async Task<(int Passed, int Total)> RunTest(string name, Func<Task<bool>> testToAwait, int passed_tests, int total_tests)
+        private static async Task<(int Passed, int Total)> RunTest(string name, MethodInfo testToAwait, int passed_tests, int total_tests)
         {
             var stopwatch = new Stopwatch();
-            stopwatch.Start();
 
-            var repeatAttr = (RepeatAttribute)testToAwait.Method.GetCustomAttributes(typeof(RepeatAttribute), false).FirstOrDefault();
+            var repeatAttr = (RepeatAttribute)testToAwait.GetCustomAttributes(typeof(RepeatAttribute), false).FirstOrDefault();
 
             int repeat = repeatAttr != null ? (Debugger.IsAttached ? repeatAttr.DebugTimes : repeatAttr.Times) : 0;
-            bool mayFail = testToAwait.Method.GetCustomAttributes(typeof(MayFailAttribute), false).FirstOrDefault() != null;
-            bool skip = testToAwait.Method.GetCustomAttributes(typeof(SkipAttribute), false).FirstOrDefault() != null;
+            bool mayFail = testToAwait.GetCustomAttributes(typeof(MayFailAttribute), false).FirstOrDefault() != null;
+            bool skip = testToAwait.GetCustomAttributes(typeof(SkipAttribute), false).FirstOrDefault() != null;
 
-            Console.Write($"{name}: (x01) ");
-            bool ret = skip || await testToAwait();
+            Func<Task<bool>> test = () => (Task<bool>)testToAwait.Invoke(null, null);
+
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.Write($"\r{name}: ");
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.Write($"(x01) ");
+
+            stopwatch.Start();
+            bool ret = skip || await test();
             for (int i = 0; !skip && ret && i < repeat; i++)
             {
-                Console.Write($"\r{name}: (x{i + 2:00}) ");
-                ret &= await testToAwait();
+                Console.ForegroundColor = ConsoleColor.Gray;
+                Console.Write($"\r{name}: ");
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write($"(x{i + 2:00}) ");
+                ret &= await test();
             }
+            stopwatch.Stop();
 
             var verb = ret ? "PASS" : "FAIL";
             verb = mayFail && !ret ? "WARN" : verb;
             verb = skip ? "SKIP" : verb;
 
+            switch(verb)
+            {
+                case "FAIL":
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    break;
+                case "WARN":
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    break;
+                case "SKIP":
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    break;
+                case "PASS":
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    break;
+            }
             Console.WriteLine($"{stopwatch.Elapsed.TotalSeconds:0.000}s. ({verb})");
-            stopwatch.Stop();
+            Console.ForegroundColor = ConsoleColor.Gray;
             return (passed_tests + (ret || mayFail ? 1 : 0), total_tests + 1);
+        }
+
+        private static IEnumerable<(MethodInfo Method, string Name)> GetTests()
+        {
+            return Assembly
+                .GetCallingAssembly()
+                .GetTypes()
+                .SelectMany(t => 
+                    t.GetMethods(BindingFlags.Static | BindingFlags.NonPublic)
+                    .Union(t.GetMethods(BindingFlags.Static | BindingFlags.Public)))
+                .Select(m => (Method: m, Attr: m.GetCustomAttribute<TestAttribute>()?.Description))
+                .Where(_ => _.Attr != null)
+                ;
         }
 
         static async Task Main(string[] _)
@@ -85,34 +135,18 @@ namespace FlowAI
             var stopwatch = new Stopwatch();
             stopwatch.Start();
             int passed_tests = 0; int total_tests = 0;
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowConstant -> FlowBuffer ", TestConstToBuf, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowInputJunction          ", TestInputJunctions1, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowInputJunction ", TestSplittingInputJunctions1, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SequentialFlowInputJunction", TestSequentialInputJunctions1, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: DropletMapper w/ PipeFlow()", TestMapWithPipe, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowSensor (takes a while) ", TestSensors1, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Max&MinDropletBuffers      ", TestMaxMinBuffers, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowMapper                 ", TestFlowMapper, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowTransformer<int,string>", TestDropletTransformers1, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: CSV file to dynamic objects", ParseCsvToDynamicObjects, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowFilter                 ", TestFlowFilter, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: SplittingFlowOutputJunction", TestSplittingOutputJunctions1, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: ReducingFlowOutputJunction ", TestReducingOutputJunctions, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Fibonacci w/ Recursive Pipe", TestFibonacciScenario, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FlowAdapter<FileStream,_>  ", TestStreamAdapters1, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: FileStreamFlowAdapter      ", TestStreamAdapters2, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Network Adapters (may fail)", TestStreamAdapters3, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: String rewriting engine    ", TestStringRewritingMachine, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Binary function evaluator  ", TestBinaryCircuit, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Neuron-based Logic Gate    ", TestNeuron1, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Neural Flow interfaces     ", TestNeuron2, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Individual Neuron Layer    ", TestNeuron3, passed_tests, total_tests);
-            (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: Neurons and real numbers   ", TestNeuron4, passed_tests, total_tests);
+            foreach (var (Method, Name) in GetTests())
+            {
+                (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: {Name.PadRight(27)}", Method, passed_tests, total_tests);
+            }
             stopwatch.Stop();
+            Console.ForegroundColor = passed_tests == total_tests ? ConsoleColor.Green : ConsoleColor.Red;
             Console.WriteLine($"\n{passed_tests:00}/{total_tests:00} tests passed. Elapsed time    : {stopwatch.Elapsed.TotalSeconds:0.000}s. ({(passed_tests == total_tests ? "PASS" : "FAIL")})");
+            Console.ForegroundColor = ConsoleColor.Gray;
             Console.ReadKey();
         }
 
+        [Test("FlowConstant -> FlowBuffer")]
         static async Task<bool> TestConstToBuf()
         {
             // Create a constant producer that continously emits 5's
@@ -130,6 +164,7 @@ namespace FlowAI
                 && buf.Contents.Count == buf.Capacity - smallBuf.Capacity
                 && smallBuf.Contents.All(x => x == 5);
         }
+        [Test("FlowInputJunction")]
         static async Task<bool> TestInputJunctions1()
         {
             // Create a sequence producer that continously emits a pattern
@@ -147,6 +182,7 @@ namespace FlowAI
                 && bufA.Contents.SequenceEqual(new[] { 1, 2, 3, 4, 5, 1, 2, 3, 4, 5 })
                 && bufB.Contents.SequenceEqual(new[] { 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5 });
         }
+        [Test("SplittingFlowInputJunction")]
         static async Task<bool> TestSplittingInputJunctions1()
         {
             // Create a sequence producer that continously emits a pattern
@@ -164,6 +200,7 @@ namespace FlowAI
                 && !bufA.Contents.SequenceEqual(new[] { 1, 2, 3, 4, 5, 1, 2, 3, 4, 5 })
                 && !bufB.Contents.SequenceEqual(new[] { 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5 });
         }
+        [Test("SequentialFlowInputJunction")]
         static async Task<bool> TestSequentialInputJunctions1()
         {
             // Create a sequence producer that continously emits a pattern
@@ -181,6 +218,7 @@ namespace FlowAI
                 && bufA.Contents.SequenceEqual(new[] { 1, 2, 3 })
                 && bufB.Contents.SequenceEqual(new[] { 4, 5, 1, 2, 3, 4, 5 });
         }
+        [Test("FlowSensor (takes a while)")]
         static async Task<bool> TestSensors1()
         {
             // Create a sequence producer that continously emits a random pattern
@@ -197,6 +235,7 @@ namespace FlowAI
             return sensor.Value == sensor.OnValue
                 && sensor.Contents.SequenceEqual("hell");
         }
+        [Test("Max&MinDropletBuffers")]
         static async Task<bool> TestMaxMinBuffers()
         {
             var seq = new FlowSequence<int>(new[] { -100, 1, 3, 5, 7, 100 });
@@ -215,6 +254,7 @@ namespace FlowAI
                 .Collect();
             return res.SequenceEqual(new[] { -100, 100 });
         }
+        [Test("DropletMapper w/ PipeFlow()")]
         static async Task<bool> TestMapWithPipe()
         {
             // Create a sequence producer that continously emits a pattern
@@ -248,6 +288,7 @@ namespace FlowAI
             return buf.Full
                 && buf.Contents.SequenceEqual("HELLOworld");
         }
+        [Test("FlowMapper")]
         static async Task<bool> TestFlowMapper()
         {
             // Create a sequence with a simple pattern
@@ -266,6 +307,7 @@ namespace FlowAI
             IProducerConsumerCollection<int> ret = await map.PipeFlow(p, p.Flow()).Collect(12);
             return ret.SequenceEqual(new[] { 1, 9, 9, 9, 8, 8, 9, 9, 9, 8, 8, 9 });
         }
+        [Test("FlowFilter")]
         static async Task<bool> TestFlowFilter()
         {
             // Create a sequence with a simple pattern
@@ -284,6 +326,7 @@ namespace FlowAI
             return ret.SequenceEqual(new[] { 1, 5, 6, 7, 8, 9, 0, 1, 5, 6 })
                 && snk.Contents.SequenceEqual(new[] { 2, 3, 4, 2, 3, 4 });
         }
+        [Test("ReducingFlowOutputJunction")]
         static async Task<bool> TestReducingOutputJunctions()
         {
             // Create a sequence with a simple pattern
@@ -308,6 +351,7 @@ namespace FlowAI
             return ret.SequenceEqual(new[] { 1, 5, 1, 5, 1, 5, 1, 5, 1, 5 })
                 && snk.Empty;
         }
+        [Test("Fibonacci w/ Recursive Pipe")]
         static async Task<bool> TestFibonacciScenario()
         {
             // Create a buffer to store the fibonacci sequence
@@ -345,8 +389,7 @@ namespace FlowAI
             // Res contains the fibonacci sequence!
             return res.SequenceEqual(new[] { 1, 1, 2, 3, 5, 8, 13, 21, 34, 55 });
         }
-
-
+        [Test("FlowAdapter<FileStream,_>")]
         static async Task<bool> TestStreamAdapters1()
         {
             // Create an adapter that parses FileStreams into strings of length 2
@@ -364,6 +407,7 @@ namespace FlowAI
             string ret = (await aggregator.PipeFlow(aggregator, aggregator.PipeFlow(adapter, adapter.Flow())).Collect()).First();
             return "Hello world!".Equals(ret);
         }
+        [Test("FileStreamFlowAdapter")]
         static async Task<bool> TestStreamAdapters2()
         {
             // Create an adapter that parses FileStreams into individual chars
@@ -382,6 +426,7 @@ namespace FlowAI
         }
         // Adapts socket streams and tests that they work. Sometimes it fails, but rerunning this test seems to fix it.
         [MayFail]
+        [Test("Network Adapters (may fail)")]
         static async Task<bool> TestStreamAdapters3()
         {
             const int PORT = 5555;
@@ -414,6 +459,7 @@ namespace FlowAI
             IProducerConsumerCollection<char> ret = await mapper.PipeFlow(adapter, adapter.Flow()).Collect();
             return ret.SequenceEqual("Hello my dudes from the web!");
         }
+        [Test("FlowTransformer<int,string>")]
         static async Task<bool> TestDropletTransformers1()
         {
             string[] choices = new[] {
@@ -431,6 +477,7 @@ namespace FlowAI
             return ret.SequenceEqual(seq.Sequence.Select(i => choices[i]));
         }
         // Parses CSV files with a heading row into dynamic key-value store objects with properties matching the heading row
+        [Test("CSV file to dynamic objects")]
         static async Task<bool> ParseCsvToDynamicObjects()
         {
             // Create an adapter that parses FileStreams into individual chars
@@ -495,6 +542,7 @@ namespace FlowAI
                 && ((dynamic)objects.ElementAt(2)).Desc.Equals("Yang");
         }
         // Creates a string rewriting language and tests its efficacy
+        [Test("String rewriting engine")]
         static async Task<bool> TestStringRewritingMachine()
         {
             // http://www.freefour.com/rewriting-as-a-computational-paradigm/
@@ -540,6 +588,7 @@ namespace FlowAI
                 && ret.First().Equals("_1100");
         }
         // Creates a boolean function as a flow of bools and evaluates it by collecting the result
+        [Test("Boolean gates")]
         static async Task<bool> TestBinaryCircuit()
         {
             var not = new DropletTransformer<bool, bool>(a => !a);
@@ -588,6 +637,7 @@ namespace FlowAI
         }
         // Creates a pre-trained neuron-based binary gate and tests that it works
         [Repeat(times: 98, DebugTimes = 9)]
+        [Test("Neural Boolean gates")]
         static async Task<bool> TestNeuron1()
         {
             const int epochs = 100;
@@ -646,6 +696,7 @@ namespace FlowAI
         }
         // Creates a more advanced neuron that is trained from another flow component
         [Repeat(times: 98, DebugTimes = 9)]
+        [Test("Neural Flow interfaces")]
         static async Task<bool> TestNeuron2()
         {
             const int epochs = 100;
@@ -683,6 +734,7 @@ namespace FlowAI
             return ret;
         }
         // Creates a simple layer of neurons
+        [Test("Individual Neuron Layer")]
         static async Task<bool> TestNeuron3()
         {
             const int epochs = 1000;
@@ -724,6 +776,7 @@ namespace FlowAI
 
             return ret;
         }
+        [Test("Neurons and real numbers")]
         static async Task<bool> TestNeuron4()
         {
             const int epochs = 1000;
@@ -759,5 +812,32 @@ namespace FlowAI
 
             return ret;
         }
+        [Test("Neural Network")]
+        static async Task<bool> TestNeuralNet1()
+        {
+            const int epochs = 1000;
+            const double lr = 0.5;
+
+            var net = new FlowNeuralNetwork(3, new[] { 3, 2, 1 }, lr, epochs);
+            await net.Train(new[] {
+                (new[]{ 0.0, 0.0, 0.0 }, new[]{ 0.0 }),
+                (new[]{ 1.0, 0.0, 0.0 }, new[]{ 0.0 }),
+                (new[]{ 0.0, 1.0, 0.0 }, new[]{ 0.0 }),
+                (new[]{ 1.0, 1.0, 0.0 }, new[]{ 0.0 }),
+                (new[]{ 0.0, 0.0, 1.0 }, new[]{ 0.0 }),
+                (new[]{ 1.0, 0.0, 1.0 }, new[]{ 0.0 }),
+                (new[]{ 0.0, 1.0, 1.0 }, new[]{ 0.0 }),
+                (new[]{ 1.0, 1.0, 1.0 }, new[]{ 0.0 })
+            }, epochs, lr);
+
+            var input = new FlowVariable<double[]>(new double[0]);
+            var predict = net.PipeFlow(input, input.Flow(maxDroplets: 1));
+
+            input.Value = new[] { 0.0, 0.0, 0.0 };
+            var ret = (await predict.Collect()).Single().SequenceEqual(new[] { 0.0 });
+
+            return ret;
+        }
+
     }
 }

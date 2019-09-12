@@ -22,6 +22,14 @@ namespace FlowAI.Hybrids.Neural
         public double TrainingBufferLearningRate { get; private set; }
         public int TotalTimesTrained { get; private set; }
         public FlowNeuron[] Neurons { get; }
+        
+        internal void AdjustWeights(double[] input, double[] error, double learningRate)
+        {
+            for (int i = 0; i < Neurons.Length; i++)
+            {
+                Neurons[i].AdjustWeights(input, error[i], learningRate);
+            }
+        }
 
         public FlowNeuronLayer(int nInputs, int nNeurons, double learningRate, int trainingEpochs, Func<double, double> activation = null)
             : base(null, (i, o) => i.Length == nNeurons, 1)
