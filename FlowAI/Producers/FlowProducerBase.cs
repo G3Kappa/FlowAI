@@ -82,7 +82,7 @@ namespace FlowAI.Producers
 
                     if (!self.IsOpen || --maxDroplets == 0 || (stop != null && stop(ret)))
                     {
-                        yield.Break();
+                        break;
                     }
                 }
             });

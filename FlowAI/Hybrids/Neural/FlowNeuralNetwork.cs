@@ -70,7 +70,7 @@ namespace FlowAI.Hybrids.Neural
             var perLayerError = new List<double[]>();
             var inputs = new List<double[]>();
             var outputs = new List<double[]>();
-            for (int i = 0; i < epochs; i++)
+            for (int _epoch = 0; _epoch < epochs; _epoch++)
             {
                 TotalTimesTrained += arr.Length;
                 foreach (var d in arr)
@@ -88,14 +88,18 @@ namespace FlowAI.Hybrids.Neural
                         inputs.Add(output);
                     }
                     inputs.RemoveAt(inputs.Count - 1);
-                    // Error for the datum's output and the last layer's output
-                    var err = d.Output.Select((o, _o) => (o - inputs.Last()[_o]) * ActivationFunctions.SigmoidDerivative(inputs.Last()[_o])).ToArray();
                     // Backpropagation step
-                    Layers.Last().AdjustWeights(inputs[inputs.Count - 1], err, learningRate);
-                    for (int j = Layers.Length - 2; j >= 0; j--)
+                    var err = Layers.Last().Train(new[] { (inputs.Last(), d.Output) }, epochs: 1, learningRate: learningRate)
+                        .Sum();
+                    for (int l = Layers.Length - 2; l >= 0; l--)
                     {
-                        err = outputs[j + 1].Select((o, _o) => o * err[_o]).ToArray();
-                        Layers[j].AdjustWeights(inputs[j], err, learningRate);
+                        err = Layers[l].Train(new[] {
+                            (inputs[l], outputs[l].Select((o, _o) => o - learningRate * err * inputs[l + 1][_o])
+                                .ToArray())
+                        }, 
+                        epochs: 1, 
+                        learningRate: 1)
+                        .Sum();
                     }
                     inputs.Clear();
                     outputs.Clear();

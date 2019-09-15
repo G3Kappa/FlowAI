@@ -63,6 +63,12 @@ namespace FlowAI
 
     public class Program
      {
+        private static T Print<T>(T obj, string template = "{0}", params object[] args)
+        {
+            Console.WriteLine("\t" + template, new object[] { obj }.Union(args).ToArray());
+            return obj;
+        }
+
         private static async Task<(int Passed, int Total)> RunTest(string name, MethodInfo testToAwait, int passed_tests, int total_tests)
         {
             var stopwatch = new Stopwatch();
@@ -812,29 +818,38 @@ namespace FlowAI
 
             return ret;
         }
-        [Test("Neural Network")]
+        [Test("Neural Net Parity Check")]
         static async Task<bool> TestNeuralNet1()
         {
-            const int epochs = 1000;
-            const double lr = 0.5;
+            const int epochs = 100;
+            const double lr = 10;
+            const double tolerance = 0.05;
 
-            var net = new FlowNeuralNetwork(3, new[] { 3, 2, 1 }, lr, epochs);
+            var net = new FlowNeuralNetwork(3, new[] { 1, 2, 1 }, lr, epochs);
             await net.Train(new[] {
-                (new[]{ 0.0, 0.0, 0.0 }, new[]{ 0.0 }),
-                (new[]{ 1.0, 0.0, 0.0 }, new[]{ 0.0 }),
-                (new[]{ 0.0, 1.0, 0.0 }, new[]{ 0.0 }),
-                (new[]{ 1.0, 1.0, 0.0 }, new[]{ 0.0 }),
-                (new[]{ 0.0, 0.0, 1.0 }, new[]{ 0.0 }),
-                (new[]{ 1.0, 0.0, 1.0 }, new[]{ 0.0 }),
+                (new[]{ 0.0, 1.0, 0.0 }, new[]{ 1.0 }),
                 (new[]{ 0.0, 1.0, 1.0 }, new[]{ 0.0 }),
-                (new[]{ 1.0, 1.0, 1.0 }, new[]{ 0.0 })
+                (new[]{ 1.0, 1.0, 0.0 }, new[]{ 1.0 }),
+                (new[]{ 1.0, 1.0, 1.0 }, new[]{ 0.0 }),
             }, epochs, lr);
 
             var input = new FlowVariable<double[]>(new double[0]);
-            var predict = net.PipeFlow(input, input.Flow(maxDroplets: 1));
+            Func<double[], IAsyncEnumerator<double[]>> predict = (double[] d) =>
+            {
+                input.Value = d;
+                return net.PipeFlow(input, input.Flow());
+            };
 
-            input.Value = new[] { 0.0, 0.0, 0.0 };
-            var ret = (await predict.Collect()).Single().SequenceEqual(new[] { 0.0 });
+            const string fmt = "Input: {1}; Output: {0:0.00}"; Print("");
+            var
+            ret  = Print((await predict(new[] { 0.0, 0.0, 0.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") >= 1 - tolerance;
+            ret &= Print((await predict(new[] { 0.0, 0.0, 1.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") <= tolerance;
+            ret &= Print((await predict(new[] { 0.0, 1.0, 0.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") >= 1 - tolerance;
+            ret &= Print((await predict(new[] { 0.0, 1.0, 1.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") <= tolerance;
+            ret &= Print((await predict(new[] { 1.0, 0.0, 0.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") >= 1 - tolerance;
+            ret &= Print((await predict(new[] { 1.0, 0.0, 1.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") <= tolerance;
+            ret &= Print((await predict(new[] { 1.0, 1.0, 0.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") >= 1 - tolerance;
+            ret &= Print((await predict(new[] { 1.0, 1.0, 1.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") <= tolerance;
 
             return ret;
         }

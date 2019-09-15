@@ -66,7 +66,7 @@ namespace FlowAI.Hybrids.Neural
                 foreach ((double[] input, double target) in dataset)
                 {
                     TotalTimesTrained++;
-                    double prediction = Activate(input)[0]; // Can be 1 or 0
+                    double prediction = Activate(input)[0]; 
                     var error = (target - prediction) * ActivationFunctions.SigmoidDerivative(prediction);
                     AdjustWeights(input, error, learningRate);
                     globalError += error;

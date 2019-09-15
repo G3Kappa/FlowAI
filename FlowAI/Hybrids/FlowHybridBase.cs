@@ -42,6 +42,11 @@ namespace FlowAI.Hybrids
             return PipeFlow(producer, source.GetAsyncEnumerator(), stop, maxDroplets);
         }
 
+        public IAsyncEnumerator<TOutput> PipeFlow(IFlowProducer<TInput> producer, Func<IAsyncEnumerator<TInput>> flowStarter, Predicate<TOutput> stop = null, int maxDroplets = 0)
+        {
+            return PipeFlow(producer, flowStarter(), stop, maxDroplets);
+        }
+
         /// <summary>
         /// Pipes an input flow into this component until it runs dry, then returns the output flow.
         /// </summary>

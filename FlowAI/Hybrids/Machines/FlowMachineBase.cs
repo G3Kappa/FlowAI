@@ -88,7 +88,7 @@ namespace FlowAI.Hybrids.Machines
 
                         if (!OutputBuffer.Empty)
                         {
-                            await Flow(stop: t => OutputBuffer.Empty || (stop?.Invoke(t) ?? false), maxDroplets: OutputBuffer.Capacity)
+                            await Flow(stop: t => --maxDroplets == 0 || OutputBuffer.Empty || (stop?.Invoke(t) ?? false), maxDroplets: OutputBuffer.Capacity)
                             .ForEachAsync(async t =>
                             {
                                 await yield.ReturnAsync(t);
