@@ -30,7 +30,10 @@ namespace FlowAI.Hybrids.Neural
                 Neurons[i].AdjustWeights(input, error[i], learningRate);
             }
         }
-
+        public double[] Error((double[] input, double[] target) data)
+        {
+            return Neurons.Select((n, _n) => n.Error((data.input, data.target[_n]))).ToArray();
+        }
         public FlowNeuronLayer(int nInputs, int nNeurons, double learningRate, int trainingEpochs, ActivationFunction activation = null)
             : base(null, (i, o) => i.Length == nNeurons, 1)
         {
@@ -78,8 +81,6 @@ namespace FlowAI.Hybrids.Neural
                 yield return Train(dataset, learningRate).ToArray();
             }
         }
-
-
         public override async Task Update(FlowBuffer<double[]> inBuf, FlowBuffer<double[]> outBuf)
         {
             if (!TrainingBuffer.Empty)

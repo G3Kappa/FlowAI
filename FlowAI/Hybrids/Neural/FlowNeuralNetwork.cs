@@ -67,14 +67,11 @@ namespace FlowAI.Hybrids.Neural
 
             for (int _epoch = 0; _epoch < epochs; _epoch++)
             {
-                foreach (var d in arr)
+                foreach (var (InputExample, OutputExample) in arr)
                 {
                     TotalTimesTrained++;
-                    /*
-                     WARNING: TODO: TO COMPLETE
-                     */
-                    // Feedforward step
-                    inputs.Add(d.Input);
+                    // Feedforward step: predict the result (and keep a list of inputs/outputs for each layer).
+                    inputs.Add(InputExample);
                     for (int j = 0; j < Layers.Length; j++)
                     {
                         var output = (await Layers[j].PipeFlow(this, new[] { inputs.Last() }.GetAsyncEnumerator()).Collect()).Single().ToArray();
@@ -82,11 +79,12 @@ namespace FlowAI.Hybrids.Neural
                         inputs.Add(output);
                     }
                     inputs.RemoveAt(inputs.Count - 1);
-                    // Backpropagation step
-                    var outError = Layers.Last().Neurons.Select((n, _o) => (d.Output[_o] - outputs.Last()[_o]) * n.Activation.Call(outputs.Last()[_o], derivative: true)).ToArray();
+                    // Backpropagation step: calcualate the error for the output of the network and propagate it backwards
+                    var outError = Layers.Last().Error((inputs.Last(), OutputExample));
                     errors.Add(outError);
                     for (int l = Layers.Length - 2; l >= 0; l--)
                     {
+                        // Multiply the activation of each neuron by the sum of the partial derivative of the weights
                         var err = outputs[l].Select((o, _o) =>
                                 Layers[l].Neurons[_o].Activation.Call(o, derivative: true) 
                                 * Layers[l + 1].Neurons.Select((n, _n) =>
@@ -96,7 +94,7 @@ namespace FlowAI.Hybrids.Neural
                         errors.Add(err);
                     }
                     errors.Reverse();
-                    // Learning step
+                    // Learning step: adjust the weights (deferred as to not affect the outcome for this batch)
                     for (int i = 0; i < Layers.Length; i++)
                     {
                         toTrain.Add((inputs[i], errors[i]));
@@ -105,6 +103,7 @@ namespace FlowAI.Hybrids.Neural
                     outputs.Clear();
                     errors.Clear();
                 }
+                // (Learning step)
                 for (int i = 0; i < toTrain.Count; i++)
                 {
                     Layers[i % Layers.Length].AdjustWeights(toTrain[i].Item1, toTrain[i].Item2, learningRate);

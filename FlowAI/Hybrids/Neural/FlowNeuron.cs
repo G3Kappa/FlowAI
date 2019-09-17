@@ -58,19 +58,23 @@ namespace FlowAI.Hybrids.Neural
         public double TrainingBufferLearningRate { get; set; }
         public int TotalTimesTrained { get; private set; }
 
-        public int OutputsReady => OutputBuffer.Contents.Count;
-
         internal void AdjustWeights(double[] input, double error, double learningRate)
         {
             Weights = new[] { Weights[0] + error * learningRate }.Concat(Weights.Skip(1).Select((w, wi) => w + learningRate * error * input[wi])).ToArray();
         }
+
+        public double Error((double[] input, double target) data)
+        {
+            double prediction = Activate(data.input)[0];
+            return (data.target - prediction) * Activation.Call(prediction, derivative: true);
+        }
+
         public double Train((double[] input, double target) data, double learningRate = 1)
         {
+            double err = Error(data);
+            AdjustWeights(data.input, err, learningRate);
             TotalTimesTrained++;
-            double prediction = Activate(data.input)[0];
-            var error = (data.target - prediction) * Activation.Call(prediction, derivative: true);
-            AdjustWeights(data.input, error, learningRate);
-            return error;
+            return err;
         }
         public IEnumerable<double> Train(IEnumerable<(double[], double)> dataset, double learningRate = 1)
         {
@@ -86,13 +90,11 @@ namespace FlowAI.Hybrids.Neural
                 yield return Train(dataset, learningRate).ToArray();
             }
         }
-
         protected double[] Activate(double[] input)
         {
             double weightedSum = new[] { 1.0 }.Concat(input).Select((v, i) => Weights[i] * v).Sum();
             return new[] { Activation.Call(weightedSum, derivative: false) };
         }
-
         public override async Task Update(FlowBuffer<double[]> inBuf, FlowBuffer<double> outBuf)
         {
             if(!TrainingBuffer.Empty)
@@ -106,7 +108,6 @@ namespace FlowAI.Hybrids.Neural
             }
             await base.Update(inBuf, outBuf);
         }
-
         private void InitializeWeights(double[] w)
         {
             for (int i = 0; i < w.Length; i++)
@@ -114,7 +115,6 @@ namespace FlowAI.Hybrids.Neural
                 w[i] = Rng.NextDouble() * 2 - 1;
             }
         }
-
         public FlowNeuron(int nInputs, ActivationFunction activation = null, int bufferEpochs = 1, double bufferLearningRate = 1.0) 
             : base(null, (i, o) => i.Length == 1, nInputs)
         {
