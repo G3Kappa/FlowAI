@@ -21,7 +21,7 @@ namespace FlowAI.Hybrids.Buffers
             {
                 return base.ConsumeDroplet(producer, droplet);
             }
-            return Task.Run(() => true); // This buffer can never be full
+            return Task.FromResult(true); // This buffer can never be full
         }
     }
 }

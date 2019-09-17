@@ -22,7 +22,7 @@ namespace FlowAI.Hybrids.Neural
         public double TrainingBufferLearningRate { get; private set; }
         public int TotalTimesTrained { get; private set; }
         public FlowNeuron[] Neurons { get; }
-        
+
         internal void AdjustWeights(double[] input, double[] error, double learningRate)
         {
             for (int i = 0; i < Neurons.Length; i++)
@@ -56,23 +56,40 @@ namespace FlowAI.Hybrids.Neural
                    return arr;
                };
         }
-        public double[] Train(IEnumerable<(double[], double[])> dataset, int epochs = 1, double learningRate = 1)
+        public IEnumerable<double> Train((double[] input, double[] output) data, double learningRate = 1)
         {
-            var errors = new double[Neurons.Length];
-            TotalTimesTrained += epochs * dataset.Count();
+            TotalTimesTrained ++;
             for (int j = 0; j < Neurons.Length; j++)
             {
-                errors[j] = Neurons[j].Train(dataset.Select(d => (d.Item1, d.Item2[j])), epochs, learningRate);
+                yield return Neurons[j].Train((data.Item1, data.Item2[j]), learningRate);
             }
-            return errors;
         }
+        public IEnumerable<double[]> Train(IEnumerable<(double[], double[])> dataset, double learningRate = 1)
+        {
+            foreach (var d in dataset)
+            {
+                yield return Train(d, learningRate).ToArray();
+            }
+        }
+        public IEnumerable<double[][]> Train(IEnumerable<(double[], double[])> dataset, int epochs, double learningRate = 1)
+        {
+            for (int i = 0; i < epochs; i++)
+            {
+                yield return Train(dataset, learningRate).ToArray();
+            }
+        }
+
 
         public override async Task Update(FlowBuffer<double[]> inBuf, FlowBuffer<double[]> outBuf)
         {
             if (!TrainingBuffer.Empty)
             {
                 var dataset = await TrainingBuffer.Flow().Collect();
-                Train(dataset, TrainingBufferEpochs, TrainingBufferLearningRate);
+                for (int i = 0; i < TrainingBufferEpochs; i++)
+                {
+                    _ = Train(dataset, TrainingBufferLearningRate)
+                        .ToArray();
+                }
             }
             await base.Update(inBuf, outBuf);
         }

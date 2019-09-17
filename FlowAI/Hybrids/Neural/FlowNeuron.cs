@@ -16,13 +16,12 @@ namespace FlowAI.Hybrids.Neural
     {
         public static double Sigmoid(double x)
         {
-            return 1.0 / (1 + Math.Pow(Math.E, -x));
+            return 1.0 / (1 + Math.Exp(-x));
         }
 
         public static double SigmoidDerivative(double x)
         {
-            var fX = Sigmoid(x);
-            return fX * (1 - fX);
+            return x * (1 - x);
         }
     }
 
@@ -32,6 +31,7 @@ namespace FlowAI.Hybrids.Neural
     /// </summary>
     public class FlowNeuron : FlowTransformer<double[], double>
     {
+        internal static Random Rng { get; } = new Random(10);
         public double[] Weights { get; private set; }
 
         public Func<double, double> ActivationFunction { get; protected set; }
@@ -50,29 +50,27 @@ namespace FlowAI.Hybrids.Neural
         {
             Weights = new[] { Weights[0] + error * learningRate }.Concat(Weights.Skip(1).Select((w, wi) => w + learningRate * error * input[wi])).ToArray();
         }
-
-        /// <summary>
-        /// Trains the neuron on a dataset so that it can be used in a flow network.
-        /// </summary>
-        /// <param name="dataset">A list of tuples containing the input->output examples for this dataset.</param>
-        /// <param name="epochs">The number of epochs to train for.</param>
-        /// <param name="learningRate">The learning rate coefficient.</param>
-        /// <returns>The total error</returns>
-        public double Train(IEnumerable<(double[], double)> dataset, int epochs = 1, double learningRate = 1)
+        public double Train((double[] input, double target) data, double learningRate = 1)
         {
-            double globalError = 0;
+            TotalTimesTrained++;
+            double prediction = Activate(data.input)[0];
+            var error = (data.target - prediction) * ActivationFunctions.SigmoidDerivative(prediction);
+            AdjustWeights(data.input, error, learningRate);
+            return error;
+        }
+        public IEnumerable<double> Train(IEnumerable<(double[], double)> dataset, double learningRate = 1)
+        {
+            foreach (var d in dataset)
+            {
+                yield return Train(d, learningRate);
+            }
+        }
+        public IEnumerable<double[]> Train(IEnumerable<(double[], double)> dataset, int epochs, double learningRate = 1)
+        {
             for (int i = 0; i < epochs; i++)
             {
-                foreach ((double[] input, double target) in dataset)
-                {
-                    TotalTimesTrained++;
-                    double prediction = Activate(input)[0]; 
-                    var error = (target - prediction) * ActivationFunctions.SigmoidDerivative(prediction);
-                    AdjustWeights(input, error, learningRate);
-                    globalError += error;
-                }
+                yield return Train(dataset, learningRate).ToArray();
             }
-            return globalError;
         }
 
         protected double[] Activate(double[] input)
@@ -86,17 +84,20 @@ namespace FlowAI.Hybrids.Neural
             if(!TrainingBuffer.Empty)
             {
                 var dataset = await TrainingBuffer.Flow().Collect();
-                Train(dataset, TrainingBufferEpochs, TrainingBufferLearningRate);
+                for (int i = 0; i < TrainingBufferEpochs; i++)
+                {
+                    _ = Train(dataset, TrainingBufferLearningRate)
+                        .ToArray();
+                }
             }
             await base.Update(inBuf, outBuf);
         }
 
         private void InitializeWeights(double[] w)
         {
-            var rng = new Random();
             for (int i = 0; i < w.Length; i++)
             {
-                w[i] = rng.NextDouble();
+                w[i] = Rng.NextDouble() * 2 - 1;
             }
         }
 
