@@ -31,7 +31,7 @@ namespace FlowAI.Hybrids.Neural
             }
         }
 
-        public FlowNeuronLayer(int nInputs, int nNeurons, double learningRate, int trainingEpochs, Func<double, double> activation = null)
+        public FlowNeuronLayer(int nInputs, int nNeurons, double learningRate, int trainingEpochs, ActivationFunction activation = null)
             : base(null, (i, o) => i.Length == nNeurons, 1)
         {
             TrainingBuffer = new FlowBuffer<(double[], double[])>();

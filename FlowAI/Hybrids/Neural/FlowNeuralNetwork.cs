@@ -24,27 +24,19 @@ namespace FlowAI.Hybrids.Neural
         public double TrainingBufferLearningRate { get; private set; }
         public int TotalTimesTrained { get; private set; }
 
-        internal void AdjustWeights(double[] input, double[][] error, double learningRate)
+        public FlowNeuralNetwork(int nInputs, (int Neurons, ActivationFunction Activation)[] layerDef, double learningRate, int trainingEpochs) 
+            : base(null, (i, o) => i.Length == layerDef.Last().Neurons, nInputs)
         {
-            for (int i = 0; i < Layers.Length; i++)
+            if(layerDef == null || layerDef.Length == 0)
             {
-                Layers[i].AdjustWeights(input, error[i], learningRate);
-            }
-        }
-
-        public FlowNeuralNetwork(int nInputs, int[] nNeurons, double learningRate, int trainingEpochs, Func<double, double> activation = null) 
-            : base(null, (i, o) => i.Length == nNeurons.Last(), nInputs)
-        {
-            if(nNeurons == null || nNeurons.Length == 0)
-            {
-                throw new ArgumentException(nameof(nNeurons));
+                throw new ArgumentException(nameof(layerDef));
             }
 
             TrainingBuffer = new FlowBuffer<(double[], double[])>();
             TrainingBufferLearningRate = learningRate;
             TrainingBufferEpochs = trainingEpochs;
 
-            Layers = nNeurons.Select((n, i) => new FlowNeuronLayer(i == 0 ? nInputs : nNeurons[i - 1], nNeurons[i], learningRate, trainingEpochs, activation))
+            Layers = layerDef.Select((n, i) => new FlowNeuronLayer(i == 0 ? nInputs : layerDef[i - 1].Neurons, layerDef[i].Neurons, learningRate, trainingEpochs, layerDef[i].Activation))
                 .ToArray();
 
 
@@ -62,21 +54,6 @@ namespace FlowAI.Hybrids.Neural
                     .GetResult()
                     .ToArray();
             };
-        }
-
-        private double[] ElementwiseSum(double[] a, double[] b)
-        {
-            var l = Math.Min(a.Length, b.Length);
-            double[] ret = new double[Math.Max(a.Length, b.Length)];
-            for (int i = 0; i < l; i++)
-            {
-                ret[i] = a[i] + b[i];
-            }
-            for (int i = 0; i < ret.Length - l; i++)
-            {
-                ret[i] = b[i];
-            }
-            return ret;
         }
 
         public async Task Train(IEnumerable<(double[] Input, double[] Output)> dataset, int epochs = 1, double learningRate = 1)
@@ -106,12 +83,12 @@ namespace FlowAI.Hybrids.Neural
                     }
                     inputs.RemoveAt(inputs.Count - 1);
                     // Backpropagation step
-                    var outError = outputs.Last().Select((o, _o) => (d.Output[_o] - o) * ActivationFunctions.SigmoidDerivative(o)).ToArray();
+                    var outError = Layers.Last().Neurons.Select((n, _o) => (d.Output[_o] - outputs.Last()[_o]) * n.Activation.Call(outputs.Last()[_o], derivative: true)).ToArray();
                     errors.Add(outError);
                     for (int l = Layers.Length - 2; l >= 0; l--)
                     {
                         var err = outputs[l].Select((o, _o) =>
-                                ActivationFunctions.SigmoidDerivative(o) 
+                                Layers[l].Neurons[_o].Activation.Call(o, derivative: true) 
                                 * Layers[l + 1].Neurons.Select((n, _n) =>
                                     n.Weights[_o + 1] * errors.Last()[_n])
                                 .Sum())

@@ -217,6 +217,18 @@ namespace FlowAI
             return ret;
         }
 
+        public static IEnumerable<T> DebugPrint<T>(this IEnumerable<T> source, Func<T, string> fmt = null, params object[] args)
+        {
+            fmt ??= (d => d.ToString());
+            Console.Write("[ ");
+            foreach (var item in source)
+            {
+                Console.Write(fmt(item) + " ", args);
+                yield return item;
+            }
+            Console.Write(" ]\n");
+        }
+
         public static T Choose<T>(this Random rng, IList<T> from)
         {
             return from[rng.Next(from.Count)];

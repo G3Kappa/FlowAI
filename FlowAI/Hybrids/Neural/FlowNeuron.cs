@@ -12,17 +12,31 @@ using System.Threading.Tasks;
 
 namespace FlowAI.Hybrids.Neural
 {
-    public static class ActivationFunctions
+    public class ActivationFunction
     {
-        public static double Sigmoid(double x)
+        private Func<double, double> F { get; }
+        private Func<double, double> G { get; }
+
+        public double Call(double x, bool derivative)
         {
-            return 1.0 / (1 + Math.Exp(-x));
+            return derivative ? G(x) : F(x);
         }
 
-        public static double SigmoidDerivative(double x)
+        public ActivationFunction(Func<double, double> f, Func<double, double> deriv)
         {
-            return x * (1 - x);
+            F = f;
+            G = deriv;
         }
+
+        public static ActivationFunction SigmoidLogistic = new ActivationFunction(
+            x => 1.0 / (1 + Math.Exp(-x)),
+            x => x * (1 - x)
+        );
+
+        public static ActivationFunction HyperbolicTangent = new ActivationFunction(
+            x => Math.Tanh(x),
+            x => 1 - Math.Pow(Math.Tanh(x), 2)
+        );
     }
 
     /// <summary>
@@ -34,7 +48,7 @@ namespace FlowAI.Hybrids.Neural
         internal static Random Rng { get; } = new Random(10);
         public double[] Weights { get; private set; }
 
-        public Func<double, double> ActivationFunction { get; protected set; }
+        public ActivationFunction Activation { get; protected set; }
 
         /// <summary>
         /// If the training buffer contains a droplet, the next input data will be considered an example with that droplet as the known answer.
@@ -54,7 +68,7 @@ namespace FlowAI.Hybrids.Neural
         {
             TotalTimesTrained++;
             double prediction = Activate(data.input)[0];
-            var error = (data.target - prediction) * ActivationFunctions.SigmoidDerivative(prediction);
+            var error = (data.target - prediction) * Activation.Call(prediction, derivative: true);
             AdjustWeights(data.input, error, learningRate);
             return error;
         }
@@ -76,7 +90,7 @@ namespace FlowAI.Hybrids.Neural
         protected double[] Activate(double[] input)
         {
             double weightedSum = new[] { 1.0 }.Concat(input).Select((v, i) => Weights[i] * v).Sum();
-            return new[] { ActivationFunction(weightedSum) };
+            return new[] { Activation.Call(weightedSum, derivative: false) };
         }
 
         public override async Task Update(FlowBuffer<double[]> inBuf, FlowBuffer<double> outBuf)
@@ -101,13 +115,13 @@ namespace FlowAI.Hybrids.Neural
             }
         }
 
-        public FlowNeuron(int nInputs, Func<double, double> activation = null, int bufferEpochs = 1, double bufferLearningRate = 1.0) 
+        public FlowNeuron(int nInputs, ActivationFunction activation = null, int bufferEpochs = 1, double bufferLearningRate = 1.0) 
             : base(null, (i, o) => i.Length == 1, nInputs)
         {
             Weights = new double[nInputs + 1];
             InitializeWeights(Weights);
 
-            ActivationFunction = activation ?? ActivationFunctions.Sigmoid;
+            Activation = activation ?? ActivationFunction.HyperbolicTangent;
             Map = inputs => inputs.SelectMany(i => Activate(i)).ToArray();
 
             TrainingBuffer = new FlowBuffer<(double[], double)>();

@@ -651,7 +651,7 @@ namespace FlowAI
             const int epochs = 1000;
             const double lr = 10;
 
-            var neuron = new FlowNeuron(nInputs: 2);
+            var neuron = new FlowNeuron(nInputs: 2, ActivationFunction.SigmoidLogistic);
 
             // Train against an AND gate and tests that it works
             var trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
@@ -667,6 +667,7 @@ namespace FlowAI
                 trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count).Select(x => x.Inputs)
             )
             .Collect())
+            //.DebugPrint("{0:0.00} ")
             .Select(s => s > 0.5 ? 1.0 : 0.0)
             .SequenceEqual(trainingSequence.Sequence.Select(s => s.Output));
             bool ret = await predictAndCheck();
@@ -760,35 +761,38 @@ namespace FlowAI
         static async Task<bool> TestNeuralNet1()
         {
             const int epochs = 1000;
-            const double lr = 10;
+            const double lr = 0.5;
             const double tolerance = 0.1;
 
             var net = new FlowNeuralNetwork(
                 nInputs: 2, 
-                nNeurons: new[] { 6, 1 }, 
+                layerDef: new[] { (2, ActivationFunction.HyperbolicTangent), (1, ActivationFunction.HyperbolicTangent) },
                 learningRate: lr, 
                 trainingEpochs: epochs
             );
 
             await net.Train(new[] {
-                (new[]{ 0.0, 0.0 }, new[]{ 0.00 }),
+                (new[]{ 0.0, 0.0 }, new[]{ -1.00 }),
                 (new[]{ 0.0, 1.0 }, new[]{ 1.00 }),
                 (new[]{ 1.0, 0.0 }, new[]{ 1.00 }),
-                (new[]{ 1.0, 1.0 }, new[]{ 0.00 })
+                (new[]{ 1.0, 1.0 }, new[]{ -1.00 })
             }, epochs, lr);
 
             var input = new FlowVariable<double[]>(new double[0]);
             Func<double[], Task<double>> predict = async (double[] d) =>
             {
                 input.Value = d;
-                return (await net.PipeFlow(input, input.Flow(maxDroplets: 1)).Collect()).Single()[0];
+                return (await net.PipeFlow(input, input.Flow(maxDroplets: 1)).Collect())
+                    //.DebugPrint(d => $"{String.Join(", ", d.Select(_d => _d.ToString("0.00")).ToArray())}")
+                    .Single()[0];
             };
 
+            //DebugPrint("");
             bool
-            ret  = await predict(new[] { 0.0, 0.0 }) <= tolerance;
+            ret  = await predict(new[] { 0.0, 0.0 }) <= -1 + tolerance;
             ret &= await predict(new[] { 0.0, 1.0 }) >= 1 - tolerance;
             ret &= await predict(new[] { 1.0, 0.0 }) >= 1 - tolerance;
-            ret &= await predict(new[] { 1.0, 1.0 }) <= tolerance;
+            ret &= await predict(new[] { 1.0, 1.0 }) <= -1 + tolerance;
 
             return ret;
         }
