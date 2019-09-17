@@ -40,16 +40,13 @@ namespace FlowAI.Hybrids.Buffers
                 }
             });
         }
-        public override async Task<bool> ConsumeDroplet(IFlowProducer<T> producer, T droplet)
+        public override Task<bool> ConsumeDroplet(IFlowProducer<T> producer, T droplet)
         {
-            return await Task.Run(() =>
+            if (Capacity <= 0 || Queue.Count < Capacity)
             {
-                if(Capacity <= 0 || Queue.Count < Capacity)
-                {
-                    Queue.Enqueue(droplet);
-                }
-                return Queue.Count < Capacity;
-            });
+                Queue.Enqueue(droplet);
+            }
+            return Task.FromResult(Queue.Count < Capacity);
         }
         public override IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow)
         {

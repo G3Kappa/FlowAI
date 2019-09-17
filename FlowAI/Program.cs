@@ -63,9 +63,11 @@ namespace FlowAI
 
     public class Program
      {
-        private static T Print<T>(T obj, string template = "{0}", params object[] args)
+        private static T DebugPrint<T>(T obj, string template = "{0}", params object[] args)
         {
+#if DEBUG
             Console.WriteLine("\t" + template, new object[] { obj }.Union(args).ToArray());
+#endif
             return obj;
         }
 
@@ -643,11 +645,11 @@ namespace FlowAI
         }
         // Creates a pre-trained neuron-based binary gate and tests that it works
         [Repeat(times: 98, DebugTimes = 9)]
-        [Test("Neural Boolean gates")]
+        [Test("Neural Boolean gate")]
         static async Task<bool> TestNeuron1()
         {
-            const int epochs = 100;
-            const double lr = 0.5;
+            const int epochs = 1000;
+            const double lr = 10;
 
             var neuron = new FlowNeuron(nInputs: 2);
 
@@ -658,7 +660,8 @@ namespace FlowAI
                 (new[]{ 0.0, 1.0 }, 0.0),
                 (new[]{ 1.0, 1.0 }, 1.0)
             });
-            neuron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
+            _ = neuron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr)
+                .ToArray();
 
             Func<Task<bool>> predictAndCheck = async () => (await neuron.PipeFlow(null,
                 trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count).Select(x => x.Inputs)
@@ -667,37 +670,6 @@ namespace FlowAI
             .Select(s => s > 0.5 ? 1.0 : 0.0)
             .SequenceEqual(trainingSequence.Sequence.Select(s => s.Output));
             bool ret = await predictAndCheck();
-
-            // Retrain against an OR gate and tests that it works
-            trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
-                (new[]{ 0.0, 0.0 }, 0.0),
-                (new[]{ 1.0, 0.0 }, 1.0),
-                (new[]{ 0.0, 1.0 }, 1.0),
-                (new[]{ 1.0, 1.0 }, 1.0)
-            });
-            neuron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
-            ret &= await predictAndCheck();
-
-            // Retrain against a NAND gate and tests that it works
-            trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
-                (new[]{ 0.0, 0.0 }, 1.0),
-                (new[]{ 1.0, 0.0 }, 1.0),
-                (new[]{ 0.0, 1.0 }, 1.0),
-                (new[]{ 1.0, 1.0 }, 0.0)
-            });
-            neuron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
-            ret &= await predictAndCheck();
-
-            // Retrain against a NOR gate and tests that it works
-            trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
-                (new[]{ 0.0, 0.0 }, 1.0),
-                (new[]{ 1.0, 0.0 }, 0.0),
-                (new[]{ 0.0, 1.0 }, 0.0),
-                (new[]{ 1.0, 1.0 }, 0.0)
-            });
-            neuron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
-            ret &= await predictAndCheck();
-
             return ret;
         }
         // Creates a more advanced neuron that is trained from another flow component
@@ -740,6 +712,7 @@ namespace FlowAI
             return ret;
         }
         // Creates a simple layer of neurons
+        [Repeat(times: 98, DebugTimes = 9)]
         [Test("Individual Neuron Layer")]
         static async Task<bool> TestNeuron3()
         {
@@ -782,77 +755,42 @@ namespace FlowAI
 
             return ret;
         }
-        [Test("Neurons and real numbers")]
-        static async Task<bool> TestNeuron4()
-        {
-            const int epochs = 1000;
-            const double lr = 0.5;
-
-            var neuron = new FlowNeuron(nInputs: 3);
-
-            var trainingSequence = new FlowSequence<(double[] Inputs, double Output)>(new[] {
-                (new[]{ 0.0, 0.0, 0.0 }, 0.0),
-                (new[]{ 1.0, 0.0, 0.0 }, 0.0),
-                (new[]{ 0.0, 1.0, 0.0 }, 0.0),
-                (new[]{ 1.0, 1.0, 0.0 }, 0.0),
-                (new[]{ 0.0, 0.0, 1.0 }, 0.4),
-                (new[]{ 1.0, 0.0, 1.0 }, 0.6),
-                (new[]{ 0.0, 1.0, 1.0 }, 0.8),
-                (new[]{ 1.0, 1.0, 1.0 }, 1.0)
-            });
-
-            neuron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr);
-
-            var x = (await neuron.PipeFlow(null,
-                trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count).Select(x => x.Inputs)
-            )
-            .Collect());
-
-            Func<Task<bool>> predictAndCheck = async () => (await neuron.PipeFlow(null,
-                trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count).Select(x => x.Inputs)
-            )
-            .Collect())
-            .Select((s, i) => Math.Round(s, 1) - trainingSequence.Sequence[i].Output <= 0.05)
-            .All(x => x);
-            bool ret = await predictAndCheck();
-
-            return ret;
-        }
-        [Test("Neural Net Parity Check")]
+        [Test("Neural Network XOR")]
+        [Repeat(times: 8, DebugTimes = 0)]
         static async Task<bool> TestNeuralNet1()
         {
-            const int epochs = 100;
+            const int epochs = 1000;
             const double lr = 10;
-            const double tolerance = 0.05;
+            const double tolerance = 0.1;
 
-            var net = new FlowNeuralNetwork(3, new[] { 1, 2, 1 }, lr, epochs);
+            var net = new FlowNeuralNetwork(
+                nInputs: 2, 
+                nNeurons: new[] { 6, 1 }, 
+                learningRate: lr, 
+                trainingEpochs: epochs
+            );
+
             await net.Train(new[] {
-                (new[]{ 0.0, 1.0, 0.0 }, new[]{ 1.0 }),
-                (new[]{ 0.0, 1.0, 1.0 }, new[]{ 0.0 }),
-                (new[]{ 1.0, 1.0, 0.0 }, new[]{ 1.0 }),
-                (new[]{ 1.0, 1.0, 1.0 }, new[]{ 0.0 }),
+                (new[]{ 0.0, 0.0 }, new[]{ 0.00 }),
+                (new[]{ 0.0, 1.0 }, new[]{ 1.00 }),
+                (new[]{ 1.0, 0.0 }, new[]{ 1.00 }),
+                (new[]{ 1.0, 1.0 }, new[]{ 0.00 })
             }, epochs, lr);
 
             var input = new FlowVariable<double[]>(new double[0]);
-            Func<double[], IAsyncEnumerator<double[]>> predict = (double[] d) =>
+            Func<double[], Task<double>> predict = async (double[] d) =>
             {
                 input.Value = d;
-                return net.PipeFlow(input, input.Flow());
+                return (await net.PipeFlow(input, input.Flow(maxDroplets: 1)).Collect()).Single()[0];
             };
 
-            const string fmt = "Input: {1}; Output: {0:0.00}"; Print("");
-            var
-            ret  = Print((await predict(new[] { 0.0, 0.0, 0.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") >= 1 - tolerance;
-            ret &= Print((await predict(new[] { 0.0, 0.0, 1.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") <= tolerance;
-            ret &= Print((await predict(new[] { 0.0, 1.0, 0.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") >= 1 - tolerance;
-            ret &= Print((await predict(new[] { 0.0, 1.0, 1.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") <= tolerance;
-            ret &= Print((await predict(new[] { 1.0, 0.0, 0.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") >= 1 - tolerance;
-            ret &= Print((await predict(new[] { 1.0, 0.0, 1.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") <= tolerance;
-            ret &= Print((await predict(new[] { 1.0, 1.0, 0.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") >= 1 - tolerance;
-            ret &= Print((await predict(new[] { 1.0, 1.0, 1.0 }).Collect(1)).Single()[0], fmt, $"[{ String.Join(", ", input.Value) }]") <= tolerance;
+            bool
+            ret  = await predict(new[] { 0.0, 0.0 }) <= tolerance;
+            ret &= await predict(new[] { 0.0, 1.0 }) >= 1 - tolerance;
+            ret &= await predict(new[] { 1.0, 0.0 }) >= 1 - tolerance;
+            ret &= await predict(new[] { 1.0, 1.0 }) <= tolerance;
 
             return ret;
         }
-
     }
 }

@@ -64,46 +64,75 @@ namespace FlowAI.Hybrids.Neural
             };
         }
 
+        private double[] ElementwiseSum(double[] a, double[] b)
+        {
+            var l = Math.Min(a.Length, b.Length);
+            double[] ret = new double[Math.Max(a.Length, b.Length)];
+            for (int i = 0; i < l; i++)
+            {
+                ret[i] = a[i] + b[i];
+            }
+            for (int i = 0; i < ret.Length - l; i++)
+            {
+                ret[i] = b[i];
+            }
+            return ret;
+        }
+
         public async Task Train(IEnumerable<(double[] Input, double[] Output)> dataset, int epochs = 1, double learningRate = 1)
         {
             var arr = dataset.ToArray();
-            var perLayerError = new List<double[]>();
             var inputs = new List<double[]>();
             var outputs = new List<double[]>();
+            var errors = new List<double[]>();
+
+            var toTrain = new List<(double[], double[])>();
+
             for (int _epoch = 0; _epoch < epochs; _epoch++)
             {
-                TotalTimesTrained += arr.Length;
                 foreach (var d in arr)
                 {
+                    TotalTimesTrained++;
                     /*
                      WARNING: TODO: TO COMPLETE
                      */
-                    // Prediction step
+                    // Feedforward step
                     inputs.Add(d.Input);
                     for (int j = 0; j < Layers.Length; j++)
                     {
-                        var input = inputs.Last();
-                        var output = (await Layers[j].PipeFlow(this, new[] { input }.GetAsyncEnumerator()).Collect()).Single().ToArray();
+                        var output = (await Layers[j].PipeFlow(this, new[] { inputs.Last() }.GetAsyncEnumerator()).Collect()).Single().ToArray();
                         outputs.Add(output);
                         inputs.Add(output);
                     }
                     inputs.RemoveAt(inputs.Count - 1);
                     // Backpropagation step
-                    var err = Layers.Last().Train(new[] { (inputs.Last(), d.Output) }, epochs: 1, learningRate: learningRate)
-                        .Sum();
+                    var outError = outputs.Last().Select((o, _o) => (d.Output[_o] - o) * ActivationFunctions.SigmoidDerivative(o)).ToArray();
+                    errors.Add(outError);
                     for (int l = Layers.Length - 2; l >= 0; l--)
                     {
-                        err = Layers[l].Train(new[] {
-                            (inputs[l], outputs[l].Select((o, _o) => o - learningRate * err * inputs[l + 1][_o])
-                                .ToArray())
-                        }, 
-                        epochs: 1, 
-                        learningRate: 1)
-                        .Sum();
+                        var err = outputs[l].Select((o, _o) =>
+                                ActivationFunctions.SigmoidDerivative(o) 
+                                * Layers[l + 1].Neurons.Select((n, _n) =>
+                                    n.Weights[_o + 1] * errors.Last()[_n])
+                                .Sum())
+                        .ToArray();
+                        errors.Add(err);
+                    }
+                    errors.Reverse();
+                    // Learning step
+                    for (int i = 0; i < Layers.Length; i++)
+                    {
+                        toTrain.Add((inputs[i], errors[i]));
                     }
                     inputs.Clear();
                     outputs.Clear();
+                    errors.Clear();
                 }
+                for (int i = 0; i < toTrain.Count; i++)
+                {
+                    Layers[i % Layers.Length].AdjustWeights(toTrain[i].Item1, toTrain[i].Item2, learningRate);
+                }
+                toTrain.Clear();
             }
         }
 
