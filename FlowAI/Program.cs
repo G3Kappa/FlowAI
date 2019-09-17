@@ -760,8 +760,8 @@ namespace FlowAI
         [Repeat(times: 8, DebugTimes = 0)]
         static async Task<bool> TestNeuralNet1()
         {
-            const int epochs = 1000;
-            const double lr = 0.5;
+            const int epochs = 300;
+            const double lr = 0.35;
             const double tolerance = 0.1;
 
             var net = new FlowNeuralNetwork(
