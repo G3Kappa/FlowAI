@@ -155,7 +155,7 @@ namespace FlowAI
             {
                 Console.WriteLine($"Choose test suite [{String.Join("|", testsBySuite.Select(t => t.Key).Append("All").ToArray())}]: ");
                 input = Console.ReadLine();
-                suite = testsBySuite.SingleOrDefault(t => t.Key.Equals(input, StringComparison.OrdinalIgnoreCase))?.Key ?? suite;
+                suite = testsBySuite.FirstOrDefault(t => t.Key.StartsWith(input, StringComparison.OrdinalIgnoreCase))?.Key ?? suite;
             }
 
             foreach (var (Method, Name, _) in testsBySuite.Where(t => input.Equals("All", StringComparison.OrdinalIgnoreCase) || t.Key.Equals(suite, StringComparison.OrdinalIgnoreCase)).SelectMany (t => t.AsEnumerable()))
@@ -808,7 +808,7 @@ namespace FlowAI
         }
 
         // 
-        [Test("Flappy Bird", Suite = "Sims", Color = ConsoleColor.Red)]
+        [Test("Game: Flappy Bird", Suite = "Games", Color = ConsoleColor.Red)]
         static async Task<bool> TestFlappyBird()
         {
             var cur = (CursorLeft: 0, CursorTop: Console.CursorTop + 1);
@@ -838,6 +838,7 @@ namespace FlowAI
             );
 
             var _lastPipe = -1;
+            var _rngSeed = 100;
             while(!goals.TimeUp(state.Time) && !goals.ScoreWin(state.Score))
             {
                 int i = state.Time / globals.TimeStep;
@@ -847,7 +848,7 @@ namespace FlowAI
                     HoleY: 0,
                     HoleH: 0
                 );
-                state.Rng = new Random(pipe.Id);
+                state.Rng = new Random(_rngSeed + pipe.Id);
                 pipe.HoleY = state.Rng.Next(1, globals.MapHeight - 2);
                 pipe.HoleH = state.Rng.Next(2, (globals.MapHeight - pipe.HoleY) / 2 + 1);
 
@@ -875,6 +876,12 @@ namespace FlowAI
                 double error = input[0] - (input[1] + (input[2]-input[1]) / 2);
                 await state.Brain.TrainingBuffer.ConsumeDroplet((input, new[] { prediction - error }));
 
+                if(pipe.Id != _lastPipe && pipe.X <= 1)
+                {
+                    bool hit = (state.PlayerY < pipe.HoleY || state.PlayerY >= pipe.HoleY + pipe.HoleH);
+                    state.Score += hit ? -1 : 1;
+                    _lastPipe = pipe.Id;
+                }
                 Console.SetCursorPosition(cur.CursorLeft, cur.CursorTop);
                 Console.WriteLine($"Score: {state.Score:00} | Speed: {state.Speed:0.0}");
                 for (int j = 0; j < globals.MapHeight; j++)
@@ -883,20 +890,146 @@ namespace FlowAI
                     var row = (state.PlayerY == j ? '@' : ' ') + (pipe.X <= 1 ? "" : new string(' ', pipe.X - 2)) + c + (pipe.X == globals.MapWidth ? "" : new string(' ', globals.MapWidth - pipe.X));
                     Console.WriteLine(row);
                 }
-
-                await Task.Delay(globals.TimeStep);
-                state.Time += globals.TimeStep;
-                state.Speed = 0.5 + 0.5 * Math.Pow(state.Time / (double)globals.MaxTime, 2);
-
-                if(pipe.Id != _lastPipe && pipe.X <= 1)
-                {
-                    bool hit = (state.PlayerY < pipe.HoleY || state.PlayerY >= pipe.HoleY + pipe.HoleH);
-                    state.Score += hit ? -1 : 1;
-                    _lastPipe = pipe.Id;
-                }
                 Console.WriteLine($"Network: {String.Join(" -> ", new[] { input.Length }.Concat(state.Brain.Layers.Select(l => l.Neurons.Length)))}");
                 Console.WriteLine($"Input: [{ String.Join(", ", input.Select(i => i.ToString("0.00")))}] ");
                 Console.WriteLine($"Error: {error:0.00} | Prediction: {prediction:0.00}  ");
+                await Task.Delay(globals.TimeStep);
+                state.Time += globals.TimeStep;
+                state.Speed = 0.5 + 0.5 * Math.Pow(state.Time / (double)globals.MaxTime, 2);
+            }
+
+            return goals.ScoreWin(state.Score);
+        }
+        [Test("Game: Snake", Suite = "Games", Color = ConsoleColor.Red)]
+        static async Task<bool> TestSnake()
+        {
+            var cur = (CursorLeft: 0, CursorTop: Console.CursorTop + 1);
+            var globals = new
+            {
+                MaxScore = 30,
+                MaxTime = 60 * 1000,
+                TimeStep = 64,
+                MapWidth = 40,
+                MapHeight = 20,
+                Sigma = 0.5
+            };
+            var goals = new
+            {
+                ScoreWin = (Func<int, bool>)(s => s >= globals.MaxScore),
+                TimeUp = (Func<int, bool>)(t => t >= globals.MaxTime),
+            };
+            var state = (
+                Time: 0,
+                Score: 0,
+                Speed: 0.0,
+                Player: (Body: new List<(int X, int Y)>() { (0, 2), (0, 1), (0, 0) }, Direction: 1),
+                Food: (X: globals.MapWidth / 2, Y: globals.MapHeight / 2),
+                Rng: new Random(0),
+                Brain: new FlowNeuralNetwork(
+                    nInputs: 6,
+                    layerDef: new[] { (4, ActivationFunction.HyperbolicTangent), (4, ActivationFunction.HyperbolicTangent), (1, ActivationFunction.HyperbolicTangent) },
+                    learningRate: 0.03,
+                    trainingEpochs: 1)
+            );
+            while (!goals.TimeUp(state.Time) && !goals.ScoreWin(state.Score))
+            {
+                int i = state.Time / globals.TimeStep;
+
+                var input = new[] {
+                    state.Player.Body.First().X / (double)globals.MapWidth,
+                    state.Player.Body.First().Y / (double)globals.MapHeight,
+                    state.Food.X / (double)globals.MapWidth,
+                    state.Food.Y / (double)globals.MapWidth,
+                    state.Player.Body.Count / Math.Max(1.0, globals.MaxScore - 3),
+                    state.Player.Direction / 3.0
+                };
+
+                var newPos = state.Player.Body[0];
+                switch (state.Player.Direction)
+                {
+                    case 0 when state.Player.Body[0].X > 0:
+                        newPos = (state.Player.Body[0].X - 1, state.Player.Body[0].Y);
+                        break;
+                    case 0 when state.Player.Body[0].X == 0:
+                        newPos =(globals.MapWidth - 1, state.Player.Body[0].Y);
+                        break;
+                    case 1 when state.Player.Body[0].X < globals.MapWidth:
+                        newPos =(state.Player.Body[0].X + 1, state.Player.Body[0].Y);
+                        break;
+                    case 1 when state.Player.Body[0].X >= globals.MapWidth:
+                        newPos =(0, state.Player.Body[0].Y);
+                        break;
+                    case 2 when state.Player.Body[0].Y > 0:
+                        newPos =(state.Player.Body[0].X, state.Player.Body[0].Y - 1);
+                        break;
+                    case 2 when state.Player.Body[0].Y == 0:
+                        newPos =(state.Player.Body[0].X, globals.MapHeight - 1);
+                        break;
+                    case 3 when state.Player.Body[0].Y < globals.MapHeight:
+                        newPos =(state.Player.Body[0].X, state.Player.Body[0].Y + 1);
+                        break;
+                    case 3 when state.Player.Body[0].Y >= globals.MapHeight:
+                        newPos =(state.Player.Body[0].X, 0);
+                        break;
+                }
+                if(!state.Player.Body.Any(p => p.X == newPos.X && p.Y == newPos.Y))
+                {
+                    for (int j = state.Player.Body.Count - 1; j > 0; j--)
+                    {
+                        state.Player.Body[j] = state.Player.Body[j - 1];
+                    }
+
+                    state.Player.Body[0] = newPos;
+                }
+
+                var prediction = state.Brain.PipeFlow(new[] { input })
+                    .CollectSync()
+                    .Single()[0];
+
+                if (prediction < -globals.Sigma)
+                {
+                    state.Player.Direction--;
+                }
+                else if (prediction > globals.Sigma)
+                {
+                    state.Player.Direction++;
+                }
+                state.Player.Direction = (state.Player.Direction % 4 + 4) % 4;
+
+                var p = (X: state.Food.X - state.Player.Body[0].X, Y: state.Food.Y - state.Player.Body[1].Y);
+                double error = input[5] - (Math.Atan2(p.Y, p.X) * 180 / Math.PI) / 360.0;
+                error *= 1 - Math.Pow(input[0] - input[2] + input[1] - input[3], 2);
+                await state.Brain.TrainingBuffer.ConsumeDroplet((input, new[] { prediction + error }));
+
+                Console.SetCursorPosition(cur.CursorLeft, cur.CursorTop);
+                Console.WriteLine($"Score: {state.Score:00} | Speed: {state.Speed:0.0}");
+                var sb = new StringBuilder();
+                for (int j = 0; j < globals.MapHeight; j++)
+                {
+                    for (int k = 0; k < globals.MapWidth; k++)
+                    {
+                        if(state.Player.Body.Any(p => p.X == k && p.Y == j))
+                        {
+                            sb.Append('@');
+                        }
+                        else if (state.Food.X == k && state.Food.Y == j)
+                        {
+                            sb.Append('.');
+                        }
+                        else
+                        {
+                            sb.Append(' ');
+                        }
+                    }
+                    sb.Append('\n');
+                }
+                Console.WriteLine(sb.ToString());
+                Console.WriteLine($"Network: {String.Join(" -> ", new[] { input.Length }.Concat(state.Brain.Layers.Select(l => l.Neurons.Length)))}");
+                Console.WriteLine($"Input: [{ String.Join(", ", input.Select(i => i.ToString("0.00")))}] ");
+                Console.WriteLine($"Error: {error:0.00} | Prediction: {prediction:0.00}  ");
+                await Task.Delay(globals.TimeStep);
+                state.Time += globals.TimeStep;
+                state.Speed = 0.5 + 0.5 * Math.Pow(state.Time / (double)globals.MaxTime, 2);
             }
 
             return goals.ScoreWin(state.Score);
