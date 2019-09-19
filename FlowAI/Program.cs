@@ -177,11 +177,11 @@ namespace FlowAI
             // Create a buffer that stores up to ten ints
             var buf = new FlowBuffer<int>(capacity: 10);
             // Consume flow from the constant producer until the buffer is full, then close the faucet to tell the buffer to stop consuming
-            await buf.ConsumeFlowUntilFull(k, k.Flow()).Collect();
+            await buf.ConsumeFlowUntilFull(k.Flow()).Collect();
             // Create a smaller buffer
             var smallBuf = new FlowBuffer<int>(capacity: 5);
             // Fill the smaller buffer from the larger one
-            await smallBuf.ConsumeFlowUntilFull(buf, buf.Flow()).Collect();
+            await smallBuf.ConsumeFlowUntilFull(buf.Flow()).Collect();
             // The smaller buffer is now full of fives
             return smallBuf.Full
                 && buf.Contents.Count == buf.Capacity - smallBuf.Capacity
@@ -198,7 +198,7 @@ namespace FlowAI
             // Create a junction that copies its input to both buffers
             var pipe = new FlowInputJunction<int>(bufA, bufB);
             // Fill both buffers from the constant through the junction
-            await pipe.ConsumeFlowUntilFull(p, p.Flow()).Collect();
+            await pipe.ConsumeFlowUntilFull(p.Flow()).Collect();
             // Now both buffers contain a supersequence of: 1, 2, 3, 4, 5 ...
             return bufA.Full
                 && bufB.Full
@@ -216,7 +216,7 @@ namespace FlowAI
             // Create a splitter junction that distributes its input to both buffers
             var pipe = new SplittingFlowInputJunction<int>(bufA, bufB);
             // Fill both buffers from the constant through the splitter
-            await pipe.ConsumeFlowUntilFull(p, p.Flow()).Collect();
+            await pipe.ConsumeFlowUntilFull(p.Flow()).Collect();
             // Now both buffers contain a supersequence of: 1, 3, 5, 2, 4 ... 
             return bufA.Full
                 && bufB.Full
@@ -234,7 +234,7 @@ namespace FlowAI
             // Create a splitter junction that fills bufA and then bufB
             var pipe = new SequentialFlowInputJunction<int>(bufA, bufB);
             // Fill both buffers from the constant through the splitter
-            await pipe.ConsumeFlowUntilFull(p, p.Flow()).Collect();
+            await pipe.ConsumeFlowUntilFull(p.Flow()).Collect();
             // Now check that bufB got filled only after bufA was already full
             return bufA.Full
                 && bufB.Full
@@ -287,7 +287,7 @@ namespace FlowAI
             // Create a buffer to store the results
             var buf = new FlowBuffer<int>(5);
             // Collect the squared sequence into the buffer by having it consume from the map which is piped to the sequence.
-            await buf.ConsumeFlowUntilFull(map, map.PipeFlow(p.Flow())).Collect();
+            await buf.ConsumeFlowUntilFull(map.PipeFlow(p.Flow())).Collect();
             // Buf now contains: 1, 4, 9, 16, 25
             return buf.Full
                 && buf.Contents.SequenceEqual(new[] { 1, 4, 9, 16, 25 });
@@ -306,7 +306,7 @@ namespace FlowAI
             // Here chunkSize: 5 means "take 5 droplets from A, then 5 from B, then 5 from A..."
             var pipe = new SplittingFlowOutputJunction<char>(chunkSize: 5, () => seqA.Flow(), () => seqB.Flow());
             // Collect the results into buf by consuming from map through which the splitter is being piped
-            await buf.ConsumeFlowUntilFull(map, map.PipeFlow(pipe.Flow())).Collect();
+            await buf.ConsumeFlowUntilFull(map.PipeFlow(pipe.Flow())).Collect();
             // Now the buffer contains: "HELLOworld"
             return buf.Full
                 && buf.Contents.SequenceEqual("HELLOworld");

@@ -40,18 +40,15 @@ namespace FlowAI
         /// Similar to (and calls) ConsumeFlow, but staunches the flow as soon as it returns false, then starts it again.
         /// This is a piping tool and should not be used directly by consumers.
         /// </summary>
-        public static IAsyncEnumerator<bool> ConsumeFlowUntilFull<T>(this IFlowConsumer<T> c, IFlowProducer<T> producer, IAsyncEnumerator<T> flow)
+        public static IAsyncEnumerator<bool> ConsumeFlowUntilFull<T>(this IFlowConsumer<T> c, IAsyncEnumerator<T> flow)
         {
             return new AsyncEnumerator<bool>(async yield =>
             {
-                if (producer.IsFlowStarted&& producer is FlowProducerBase<T> prodImpl)
+                await c.ConsumeFlow(flow).UntilAsync(async b =>
                 {
-                    await c.ConsumeFlow(flow).UntilAsync(async b =>
-                    {
-                        await yield.ReturnAsync(b);
-                        return b;
-                    }, yield);
-                }
+                    await yield.ReturnAsync(b);
+                    return b;
+                }, yield);
             });
         }
 
