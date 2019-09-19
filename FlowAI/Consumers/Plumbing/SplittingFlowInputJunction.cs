@@ -15,7 +15,7 @@ namespace FlowAI.Consumers.Plumbing
 
         public SplittingFlowInputJunction(params IFlowConsumer<T>[] consumers) : base(consumers) { }
 
-        public override async Task<bool> ConsumeDroplet(IFlowProducer<T> producer, T droplet)
+        public override async Task<bool> ConsumeDroplet(T droplet)
         {
             if (Consumers.Count == 0) return false;
             if(Current >= Consumers.Count)
@@ -23,7 +23,7 @@ namespace FlowAI.Consumers.Plumbing
                 Current = 0;
                 AllFalse = true;
             }
-            bool ret = await Consumers.ToArray()[Current++].ConsumeDroplet(producer, droplet);
+            bool ret = await Consumers.ToArray()[Current++].ConsumeDroplet(droplet);
             if(ret)
             {
                 AllFalse = false;

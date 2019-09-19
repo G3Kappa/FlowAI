@@ -271,7 +271,7 @@ namespace FlowAI
             var outPipe = new SequentialFlowOutputJunction<int>(() => min.Flow(), () => max.Flow());
             // Let the sequence exhaust itself and collect the maximum and minimum values found
             IProducerConsumerCollection<int> res =
-                await inPipe.ConsumeFlow(seq, seq.Flow())
+                await inPipe.ConsumeFlow(seq.Flow())
                 .Take(seq.Sequence.Count)
                 .Redirect(outPipe.Flow())
                 .Collect();

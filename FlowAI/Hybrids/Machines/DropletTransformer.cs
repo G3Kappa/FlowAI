@@ -20,12 +20,12 @@ namespace FlowAI.Hybrids.Machines
 
         public override async Task Flush(FlowBuffer<TInput> inBuf, FlowBuffer<TOutput> outBuf)
         {
-             await outBuf.ConsumeDroplet(this, Map(await inBuf.Drip()));
+             await outBuf.ConsumeDroplet(Map(await inBuf.Drip()));
         }
 
         public override async Task Update(FlowBuffer<TInput> inBuf, FlowBuffer<TOutput> outBuf)
         {
-            await outBuf.ConsumeDroplet(this, Map(await inBuf.Drip()));
+            await outBuf.ConsumeDroplet(Map(await inBuf.Drip()));
         }
     }
 }

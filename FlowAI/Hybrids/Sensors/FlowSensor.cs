@@ -26,9 +26,9 @@ namespace FlowAI.Hybrids.Sensors
             OffValue = offValue;
         }
 
-        public override async Task<bool> ConsumeDroplet(IFlowProducer<T> producer, T droplet)
+        public override async Task<bool> ConsumeDroplet(T droplet)
         {
-            bool ret = await base.ConsumeDroplet(producer, droplet);
+            bool ret = await base.ConsumeDroplet(droplet);
             Value = Contents.SequenceEqual(Sequence) ? OnValue : OffValue;
             return ret;
         }

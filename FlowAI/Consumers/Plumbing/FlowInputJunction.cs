@@ -17,25 +17,25 @@ namespace FlowAI.Consumers.Plumbing
             Consumers = new ConcurrentQueue<IFlowConsumer<T>>(consumers);
         }
 
-        public virtual async Task<bool> ConsumeDroplet(IFlowProducer<T> producer, T droplet)
+        public virtual async Task<bool> ConsumeDroplet(T droplet)
         {
             bool allFalse = true;
             foreach (IFlowConsumer<T> c in Consumers)
             {
-                if(await c.ConsumeDroplet(producer, droplet))
+                if(await c.ConsumeDroplet(droplet))
                 {
                     allFalse = false;
                 }
             }
             return !allFalse;
         }
-        public IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow)
+        public IAsyncEnumerator<bool> ConsumeFlow(IAsyncEnumerator<T> flow)
         {
             return new AsyncEnumerator<bool>(async yield =>
             {
                 await flow.ForEachAsync(async t =>
                 {
-                    bool stored = await ConsumeDroplet(producer, t);
+                    bool stored = await ConsumeDroplet(t);
                     await yield.ReturnAsync(stored);
                 });
             });

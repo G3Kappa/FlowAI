@@ -50,7 +50,7 @@ namespace FlowAI.Hybrids.Neural
 
             Map = inputs =>
                {
-                   var arr = inputJ.ConsumeFlow(this, inputs.GetAsyncEnumerator())
+                   var arr = inputJ.ConsumeFlow(inputs.GetAsyncEnumerator())
                     .Select(_ => outputJ.Drip().GetAwaiter().GetResult())
                     .Collect()
                     .GetAwaiter()

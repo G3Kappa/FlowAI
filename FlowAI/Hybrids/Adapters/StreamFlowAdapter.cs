@@ -36,7 +36,7 @@ namespace FlowAI.Hybrids.Adapters
             WriteAdapter = writeAdapter;
         }
 
-        public override async Task<bool> ConsumeDroplet(IFlowProducer<TDroplet> producer, TDroplet droplet)
+        public override async Task<bool> ConsumeDroplet(TDroplet droplet)
         {
             if (SourceStream.CanWrite)
             {
@@ -54,13 +54,13 @@ namespace FlowAI.Hybrids.Adapters
             return false;
         }
 
-        public override IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<TDroplet> producer, IAsyncEnumerator<TDroplet> flow)
+        public override IAsyncEnumerator<bool> ConsumeFlow(IAsyncEnumerator<TDroplet> flow)
         {
             return new AsyncEnumerator<bool>(async yield =>
             {
                 await flow.ForEachAsync(async t =>
                 {
-                    bool stored = await ConsumeDroplet(producer, t);
+                    bool stored = await ConsumeDroplet(t);
                     await yield.ReturnAsync(stored);
                 });
             });

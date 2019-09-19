@@ -12,14 +12,14 @@ namespace FlowAI.Consumers.Plumbing
     {
         public int Current { get; private set; } = 0;
         public SequentialFlowInputJunction(params IFlowConsumer<T>[] consumers) : base(consumers) { }
-        public override async Task<bool> ConsumeDroplet(IFlowProducer<T> producer, T droplet)
+        public override async Task<bool> ConsumeDroplet(T droplet)
         {
             if (Consumers.Count == 0) return false;
             if (Current >= Consumers.Count)
             {
                 Current = 0;
             }
-            bool ret = await Consumers.ToArray()[Current].ConsumeDroplet(producer, droplet);
+            bool ret = await Consumers.ToArray()[Current].ConsumeDroplet(droplet);
             return ret || ++Current != Consumers.Count;
         }
     }

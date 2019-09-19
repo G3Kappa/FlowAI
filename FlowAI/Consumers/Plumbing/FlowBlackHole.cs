@@ -13,18 +13,18 @@ namespace FlowAI.Consumers.Plumbing
     {
         public FlowBlackHole() { }
 
-        public async Task<bool> ConsumeDroplet(IFlowProducer<T> producer, T droplet)
+        public async Task<bool> ConsumeDroplet(T droplet)
         {
             return await Task.Run(() => false);
         }
 
-        public IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow)
+        public IAsyncEnumerator<bool> ConsumeFlow(IAsyncEnumerator<T> flow)
         {
             return new AsyncEnumerator<bool>(async yield =>
             {
                 await flow.ForEachAsync(async t =>
                 {
-                    bool stored = await ConsumeDroplet(producer, t);
+                    bool stored = await ConsumeDroplet(t);
                     await yield.ReturnAsync(stored);
                 });
             });
