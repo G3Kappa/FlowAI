@@ -39,22 +39,22 @@ namespace FlowAI.Hybrids.Machines
         /// <param name="outBuf">The output buffer</param>
         public abstract Task Flush(FlowBuffer<TInput> inBuf, FlowBuffer<TOutput> outBuf);
 
-        public override async Task<bool> ConsumeDroplet(IFlowProducer<TInput> producer, TInput droplet)
+        public override async Task<bool> ConsumeDroplet(TInput droplet)
         {
-            bool ret = await InputBuffer.ConsumeDroplet(producer, droplet);
+            bool ret = await InputBuffer.ConsumeDroplet(droplet);
             if(ShouldUpdate)
             {
                 await Update(InputBuffer, OutputBuffer);
             }
             return ret;
         }
-        public override IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<TInput> producer, IAsyncEnumerator<TInput> flow)
+        public override IAsyncEnumerator<bool> ConsumeFlow(IAsyncEnumerator<TInput> flow)
         {
             return new AsyncEnumerator<bool>(async yield =>
             {
                 await flow.ForEachAsync(async t =>
                 {
-                    bool stored = await ConsumeDroplet(producer, t);
+                    bool stored = await ConsumeDroplet(t);
                     await yield.ReturnAsync(stored);
                 });
             });
@@ -65,20 +65,20 @@ namespace FlowAI.Hybrids.Machines
             return await OutputBuffer.Drip();
         }
 
-        public override IAsyncEnumerator<TOutput> PipeFlow(IFlowProducer<TInput> producer, IAsyncEnumerator<TInput> flow, Predicate<TOutput> stop = null, int maxDroplets = 0)
+        public override IAsyncEnumerator<TOutput> PipeFlow(IAsyncEnumerator<TInput> flow, Predicate<TOutput> stop = null, int maxDroplets = 0)
         {
             // The default implementation is 1-1 dripping, while FlowMachines have a tailored and more efficient nInputs:nOutputs flowing implementation.
 
             // ... Unless their input buffer has unlimited size, then they're 1-1
 
             return InputBuffer.Capacity == 0
-                ? base.PipeFlow(producer, flow, stop, maxDroplets)
+                ? base.PipeFlow(flow, stop, maxDroplets)
                 : new AsyncEnumerator<TOutput>(async yield =>
                 {
                     bool hasNext = await flow.MoveNextAsync();
                     while (hasNext)
                     {
-                        await ConsumeDroplet(producer, flow.Current);
+                        await ConsumeDroplet(flow.Current);
                         hasNext = await flow.MoveNextAsync();
 
                         if (!hasNext && !InputBuffer.Empty)

@@ -25,12 +25,14 @@ namespace FlowAI.Hybrids.Neural
         public int TotalTimesTrained { get; private set; }
 
         public FlowNeuralNetwork(int nInputs, (int Neurons, ActivationFunction Activation)[] layerDef, double learningRate, int trainingEpochs) 
-            : base(null, (i, o) => i.Length == layerDef.Last().Neurons, nInputs)
+            : base(null, (i, o) => i.All(x => x.Length == nInputs), nInputs)
         {
             if(layerDef == null || layerDef.Length == 0)
             {
                 throw new ArgumentException(nameof(layerDef));
             }
+
+            InputBufferStrategy = InputBufferFullStrategy.Empty;
 
             TrainingBuffer = new FlowBuffer<(double[], double[])>();
             TrainingBufferLearningRate = learningRate;
@@ -42,11 +44,11 @@ namespace FlowAI.Hybrids.Neural
 
             Map = inputs =>
             {
-                var inPipe = Layers.First().PipeFlow(this, inputs);
+                var inPipe = Layers.First().PipeFlow(inputs);
                 var last = inPipe;
                 for (int i = 1; i < Layers.Length; i++)
                 {
-                    last = Layers[i].PipeFlow(this, last);
+                    last = Layers[i].PipeFlow(last);
                 }
                 return last
                     .Collect()
@@ -74,7 +76,7 @@ namespace FlowAI.Hybrids.Neural
                     inputs.Add(InputExample);
                     for (int j = 0; j < Layers.Length; j++)
                     {
-                        var output = (await Layers[j].PipeFlow(this, new[] { inputs.Last() }.GetAsyncEnumerator()).Collect()).Single().ToArray();
+                        var output = (await Layers[j].PipeFlow(new[] { inputs.Last() }.GetAsyncEnumerator()).Collect()).Single().ToArray();
                         outputs.Add(output);
                         inputs.Add(output);
                     }

@@ -23,7 +23,7 @@ namespace FlowAI.Hybrids.Buffers
         public int Capacity { get; }
 
         public bool Empty => Contents.Count == 0;
-        public bool Full => Contents.Count == Capacity;
+        public virtual bool Full => Contents.Count == Capacity;
 
         public FlowBuffer(int capacity = 0) : base()
         {
@@ -40,7 +40,7 @@ namespace FlowAI.Hybrids.Buffers
                 }
             });
         }
-        public override Task<bool> ConsumeDroplet(IFlowProducer<T> producer, T droplet)
+        public override Task<bool> ConsumeDroplet(T droplet)
         {
             if (Capacity <= 0 || Queue.Count < Capacity)
             {
@@ -48,13 +48,13 @@ namespace FlowAI.Hybrids.Buffers
             }
             return Task.FromResult(Queue.Count < Capacity);
         }
-        public override IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<T> producer, IAsyncEnumerator<T> flow)
+        public override IAsyncEnumerator<bool> ConsumeFlow(IAsyncEnumerator<T> flow)
         {
             return new AsyncEnumerator<bool>(async yield =>
             {
                 await flow.ForEachAsync(async t =>
                 {
-                    bool stored = await ConsumeDroplet(producer, t);
+                    bool stored = await ConsumeDroplet(t);
                     await yield.ReturnAsync(stored);
                 });
             });

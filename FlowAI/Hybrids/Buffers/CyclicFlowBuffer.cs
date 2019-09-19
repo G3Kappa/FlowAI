@@ -12,7 +12,7 @@ namespace FlowAI.Hybrids.Buffers
     {
         public CyclicFlowBuffer(int capacity) : base(capacity) { }
 
-        public override Task<bool> ConsumeDroplet(IFlowProducer<T> producer, T droplet)
+        public override Task<bool> ConsumeDroplet(T droplet)
         {
             if (Capacity > 0 && Queue.Count >= Capacity)
             {

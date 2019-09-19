@@ -46,7 +46,7 @@ namespace FlowAI
             {
                 if (producer.IsFlowStarted&& producer is FlowProducerBase<T> prodImpl)
                 {
-                    await c.ConsumeFlow(producer, flow).UntilAsync(async b =>
+                    await c.ConsumeFlow(flow).UntilAsync(async b =>
                     {
                         await yield.ReturnAsync(b);
                         return b;
@@ -65,7 +65,7 @@ namespace FlowAI
             {
                 if (producer.IsFlowStarted&& producer is FlowProducerBase<T> prodImpl)
                 {
-                    await c.ConsumeFlow(producer, new AsyncEnumerator<T>(async innerYield =>
+                    await c.ConsumeFlow(new AsyncEnumerator<T>(async innerYield =>
                     {
                         await flow.ForEachAsync(async d =>
                         {
@@ -95,7 +95,7 @@ namespace FlowAI
             {
                 if (producer.IsFlowStarted&& producer is FlowProducerBase<T> prodImpl)
                 {
-                    await c.ConsumeFlow(producer, new AsyncEnumerator<T>(async innerYield =>
+                    await c.ConsumeFlow(new AsyncEnumerator<T>(async innerYield =>
                     {
                         await flow.ForEachAsync(async d =>
                         {

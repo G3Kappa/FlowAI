@@ -28,6 +28,11 @@ namespace FlowAI.Hybrids.Neural
             G = deriv;
         }
 
+        public static ActivationFunction Identity = new ActivationFunction(
+            x => x,
+            x => 1
+        );
+
         public static ActivationFunction SigmoidLogistic = new ActivationFunction(
             x => 1.0 / (1 + Math.Exp(-x)),
             x => x * (1 - x)
@@ -36,6 +41,16 @@ namespace FlowAI.Hybrids.Neural
         public static ActivationFunction HyperbolicTangent = new ActivationFunction(
             x => Math.Tanh(x),
             x => 1 - Math.Pow(Math.Tanh(x), 2)
+        );
+
+        public static ActivationFunction Softplus = new ActivationFunction(
+            x => Math.Log(1 + Math.Pow(Math.E, x)),
+            x => 1 / (1 + Math.Pow(Math.E, -x))
+        );
+
+        public static ActivationFunction Rectifier = new ActivationFunction(
+            x => Math.Max(0, x),
+            x => x > 0 ? 1 : 0
         );
     }
 

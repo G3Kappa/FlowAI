@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 
 namespace FlowAI.Hybrids.Machines
 {
+
     /// <summary>
     /// A machine that transforms and changes the type of chunks of droplets as it consumes them. Like a generalized FlowMapper, but it requires a few extra parameters in order to work.
     /// </summary>
@@ -15,10 +16,18 @@ namespace FlowAI.Hybrids.Machines
         public Func<TInput[], TOutput[]> Map { get; protected set; }
         public Func<TInput[], TOutput[], bool> ConsumeIf { get; protected set; }
         public int ChunkSize { get; protected set; }
+        public enum InputBufferFullStrategy
+        {
+            FlushToOutput,
+            Drip,
+            Empty
+        }
+        public InputBufferFullStrategy InputBufferStrategy { get; set; }
 
         public FlowTransformer(Func<TInput[], TOutput[]> mapping, Func<TInput[], TOutput[], bool> consumeIf, int chunkSize) : base(chunkSize, 0)
         {
             Map = mapping;
+            InputBufferStrategy = InputBufferFullStrategy.FlushToOutput;
             ChunkSize = chunkSize;
             ConsumeIf = consumeIf;
         }
@@ -31,12 +40,27 @@ namespace FlowAI.Hybrids.Machines
             {
                 await inBuf.Flow(maxDroplets: inBuf.Capacity).Collect();
                 mapped = OnInputTransformed(oldContents, mapped);
-                await outBuf.ConsumeFlow(this, mapped.GetAsyncEnumerator()).Collect();
+                await outBuf.ConsumeFlow(mapped.GetAsyncEnumerator()).Collect();
             }
             else if (inBuf.Full)
             {
-                await inBuf.Drip();
-                await outBuf.ConsumeDroplet(this, mapped[0]);
+                switch(InputBufferStrategy)
+                {
+                    default:
+                    case InputBufferFullStrategy.FlushToOutput:
+                        await inBuf.Drip();
+                        await outBuf.ConsumeDroplet(mapped[0]);
+                        break;
+                    case InputBufferFullStrategy.Empty:
+                        while(!inBuf.Empty)
+                        {
+                            await inBuf.Drip();
+                        }
+                        break;
+                    case InputBufferFullStrategy.Drip:
+                        await inBuf.Drip();
+                        break;
+                }
             }
         }
 
@@ -44,11 +68,11 @@ namespace FlowAI.Hybrids.Machines
         {
             if(outBuf is FlowBuffer<TInput> buf)
             {
-                await buf.ConsumeFlow(inBuf, inBuf.Flow()).Collect();
+                await buf.ConsumeFlow(inBuf.Flow()).Collect();
             }
             else
             {
-                await outBuf.ConsumeFlow(this, Map((await inBuf.Flow().Collect()).ToArray()).GetAsyncEnumerator()).Collect();
+                await outBuf.ConsumeFlow(Map((await inBuf.Flow().Collect()).ToArray()).GetAsyncEnumerator()).Collect();
             }
         }
 

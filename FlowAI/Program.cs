@@ -29,6 +29,8 @@ namespace FlowAI
     class TestAttribute : Attribute
     {
         public string Description { get; }
+        public string Suite { get; set; } = "Default";
+        public ConsoleColor Color { get; set; } = ConsoleColor.Gray;
 
         public TestAttribute(string desc)
         {
@@ -61,8 +63,8 @@ namespace FlowAI
     [AttributeUsage(AttributeTargets.Method)]
     class SkipAttribute : Attribute { }
 
-    public class Program
-     {
+    public class Benchmarks
+    {
         private static T DebugPrint<T>(T obj, string template = "{0}", params object[] args)
         {
 #if DEBUG
@@ -76,6 +78,7 @@ namespace FlowAI
             var stopwatch = new Stopwatch();
 
             var repeatAttr = (RepeatAttribute)testToAwait.GetCustomAttributes(typeof(RepeatAttribute), false).FirstOrDefault();
+            var testAttr = (TestAttribute)testToAwait.GetCustomAttributes(typeof(TestAttribute), false).FirstOrDefault();
 
             int repeat = repeatAttr != null ? (Debugger.IsAttached ? repeatAttr.DebugTimes : repeatAttr.Times) : 0;
             bool mayFail = testToAwait.GetCustomAttributes(typeof(MayFailAttribute), false).FirstOrDefault() != null;
@@ -83,7 +86,7 @@ namespace FlowAI
 
             Func<Task<bool>> test = () => (Task<bool>)testToAwait.Invoke(null, null);
 
-            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.ForegroundColor = testAttr.Color;
             Console.Write($"\r{name}: ");
             Console.ForegroundColor = ConsoleColor.DarkGray;
             Console.Write($"(x01) ");
@@ -92,7 +95,7 @@ namespace FlowAI
             bool ret = skip || await test();
             for (int i = 0; !skip && ret && i < repeat; i++)
             {
-                Console.ForegroundColor = ConsoleColor.Gray;
+                Console.ForegroundColor = testAttr.Color;
                 Console.Write($"\r{name}: ");
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.Write($"(x{i + 2:00}) ");
@@ -104,7 +107,7 @@ namespace FlowAI
             verb = mayFail && !ret ? "WARN" : verb;
             verb = skip ? "SKIP" : verb;
 
-            switch(verb)
+            switch (verb)
             {
                 case "FAIL":
                     Console.ForegroundColor = ConsoleColor.Red;
@@ -124,16 +127,17 @@ namespace FlowAI
             return (passed_tests + (ret || mayFail ? 1 : 0), total_tests + 1);
         }
 
-        private static IEnumerable<(MethodInfo Method, string Name)> GetTests()
+        private static IEnumerable<(MethodInfo Method, string Name, string Suite)> GetTests()
         {
             return Assembly
                 .GetCallingAssembly()
                 .GetTypes()
-                .SelectMany(t => 
+                .SelectMany(t =>
                     t.GetMethods(BindingFlags.Static | BindingFlags.NonPublic)
                     .Union(t.GetMethods(BindingFlags.Static | BindingFlags.Public)))
-                .Select(m => (Method: m, Attr: m.GetCustomAttribute<TestAttribute>()?.Description))
+                .Select(m => (Method: m, Attr: m.GetCustomAttribute<TestAttribute>()))
                 .Where(_ => _.Attr != null)
+                .Select(m => (Method: m.Method, Name: m.Attr.Description, Suite: m.Attr.Suite))
                 ;
         }
 
@@ -143,7 +147,18 @@ namespace FlowAI
             var stopwatch = new Stopwatch();
             stopwatch.Start();
             int passed_tests = 0; int total_tests = 0;
-            foreach (var (Method, Name) in GetTests())
+
+            var testsBySuite = GetTests().GroupBy(t => t.Suite).ToArray();
+            var suite = "Default";
+            var input = "";
+            if (testsBySuite.Length > 1)
+            {
+                Console.WriteLine($"Choose test suite [{String.Join("|", testsBySuite.Select(t => t.Key).Append("All").ToArray())}]: ");
+                input = Console.ReadLine();
+                suite = testsBySuite.SingleOrDefault(t => t.Key.Equals(input, StringComparison.OrdinalIgnoreCase))?.Key ?? suite;
+            }
+
+            foreach (var (Method, Name, _) in testsBySuite.Where(t => input.Equals("All", StringComparison.OrdinalIgnoreCase) || t.Key.Equals(suite, StringComparison.OrdinalIgnoreCase)).SelectMany (t => t.AsEnumerable()))
             {
                 (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: {Name.PadRight(27)}", Method, passed_tests, total_tests);
             }
@@ -272,7 +287,7 @@ namespace FlowAI
             // Create a buffer to store the results
             var buf = new FlowBuffer<int>(5);
             // Collect the squared sequence into the buffer by having it consume from the map which is piped to the sequence.
-            await buf.ConsumeFlowUntilFull(map, map.PipeFlow(p, p.Flow())).Collect();
+            await buf.ConsumeFlowUntilFull(map, map.PipeFlow(p.Flow())).Collect();
             // Buf now contains: 1, 4, 9, 16, 25
             return buf.Full
                 && buf.Contents.SequenceEqual(new[] { 1, 4, 9, 16, 25 });
@@ -291,7 +306,7 @@ namespace FlowAI
             // Here chunkSize: 5 means "take 5 droplets from A, then 5 from B, then 5 from A..."
             var pipe = new SplittingFlowOutputJunction<char>(chunkSize: 5, () => seqA.Flow(), () => seqB.Flow());
             // Collect the results into buf by consuming from map through which the splitter is being piped
-            await buf.ConsumeFlowUntilFull(map, map.PipeFlow(pipe, pipe.Flow())).Collect();
+            await buf.ConsumeFlowUntilFull(map, map.PipeFlow(pipe.Flow())).Collect();
             // Now the buffer contains: "HELLOworld"
             return buf.Full
                 && buf.Contents.SequenceEqual("HELLOworld");
@@ -312,7 +327,7 @@ namespace FlowAI
 
             }, chunkSize: 3);
             // Collect the mapped sequence
-            IProducerConsumerCollection<int> ret = await map.PipeFlow(p, p.Flow()).Collect(12);
+            IProducerConsumerCollection<int> ret = await map.PipeFlow(p.Flow()).Collect(12);
             return ret.SequenceEqual(new[] { 1, 9, 9, 9, 8, 8, 9, 9, 9, 8, 8, 9 });
         }
         [Test("FlowFilter")]
@@ -329,7 +344,7 @@ namespace FlowAI
                 filterConsumer: snk
             );
             // Collect the filtered sequence
-            IProducerConsumerCollection<int> ret = await flt.PipeFlow(seq, seq.Flow()).Collect(10);
+            IProducerConsumerCollection<int> ret = await flt.PipeFlow(seq.Flow()).Collect(10);
             // And make sure that our buffer got the removed droplets
             return ret.SequenceEqual(new[] { 1, 5, 6, 7, 8, 9, 0, 1, 5, 6 })
                 && snk.Contents.SequenceEqual(new[] { 2, 3, 4, 2, 3, 4 });
@@ -350,7 +365,7 @@ namespace FlowAI
             // Use a reductor to merge flt and snk's flows
             var pipe = new ReducingFlowOutputJunction<int>(
                 reduce: (a, b) => a + b,
-                () => flt.PipeFlow(seq, seq.Flow()),
+                () => flt.PipeFlow(seq.Flow()),
                 () => snk.Flow()
             );
             IProducerConsumerCollection<int> ret = await pipe.Flow().Collect(10);
@@ -388,7 +403,7 @@ namespace FlowAI
                 await inPipe.ConsumeFlowUntil(                          // Let inPipe consume droplets until stop() returns true
                     fibonacci,                                          // The droplets are being consumed from the 'fibonacci' object
                     fibonacci.KickstartFlow(                            // Seed the fibonacci machine with initial state: { 0, 1 }
-                        fibonacci, new[] { 0, 1 }                       // And then start using the machine's own flow
+                        new[] { 0, 1 }                       // And then start using the machine's own flow
                     ),
                     stop: () => outBuf.Full                             // Finally, stop when outBuf has reached max. capacity
                 )                                                       // Once inPipe.ConsumeFlow has finished, drop its results and start piping from outBuf
@@ -412,7 +427,7 @@ namespace FlowAI
                 chunkSize: 8
             );
             // Pipe the reducer's flow into its own flow piped through the output of the adapter (this exemplifies recursive flows)
-            string ret = (await aggregator.PipeFlow(aggregator, aggregator.PipeFlow(adapter, adapter.Flow())).Collect()).First();
+            string ret = (await aggregator.PipeFlow(aggregator.PipeFlow(adapter.Flow())).Collect()).First();
             return "Hello world!".Equals(ret);
         }
         [Test("FileStreamFlowAdapter")]
@@ -429,7 +444,7 @@ namespace FlowAI
                 return new string(buf).Replace("world", "my dudes").ToCharArray();
             }, chunkSize: 32);
             // That's it - just collect the flow and you'll read until the EOF
-            IProducerConsumerCollection<char> ret = await mapper.PipeFlow(adapter, adapter.Flow()).Collect();
+            IProducerConsumerCollection<char> ret = await mapper.PipeFlow(adapter.Flow()).Collect();
             return ret.SequenceEqual("Hello my dudes!");
         }
         // Adapts socket streams and tests that they work. Sometimes it fails, but rerunning this test seems to fix it.
@@ -464,7 +479,7 @@ namespace FlowAI
                 return new string(buf).Replace("world", "my dudes").ToCharArray();
             }, chunkSize: 32);
 
-            IProducerConsumerCollection<char> ret = await mapper.PipeFlow(adapter, adapter.Flow()).Collect();
+            IProducerConsumerCollection<char> ret = await mapper.PipeFlow(adapter.Flow()).Collect();
             return ret.SequenceEqual("Hello my dudes from the web!");
         }
         [Test("FlowTransformer<int,string>")]
@@ -481,7 +496,7 @@ namespace FlowAI
                 i => choices[i % choices.Length]
             );
 
-            IProducerConsumerCollection<string> ret = await mapper.PipeFlow(seq, seq.Flow()).Collect(seq.Sequence.Count);
+            IProducerConsumerCollection<string> ret = await mapper.PipeFlow(seq.Flow()).Collect(seq.Sequence.Count);
             return ret.SequenceEqual(seq.Sequence.Select(i => choices[i]));
         }
         // Parses CSV files with a heading row into dynamic key-value store objects with properties matching the heading row
@@ -494,7 +509,7 @@ namespace FlowAI
                 Encoding.UTF8
             );
             // An aggregator that creates strings each time it reaches a newline or the EOF (implicit - see Flush())
-            var newlineAggregator = new FlowTransformer<char, string>(
+            var newlineAggr = new FlowTransformer<char, string>(
                 (chars) => new[] { new string(chars).Replace("\r\n", "") },
                 consumeIf: (chars, strings) => chars.Last() == '\n',
                 chunkSize: 1024 /* Strings longer than this get truncated */
@@ -532,12 +547,10 @@ namespace FlowAI
             // Pipe everything together and you have a CSV file parser
             IProducerConsumerCollection<ExpandoObject> objects =
                 await instantiator.PipeFlow(
-                    commaSplitter, commaSplitter.PipeFlow(
-                        newlineAggregator, newlineAggregator.PipeFlow(
-                            adapter, adapter.Flow()
-                        )
-                    )
-                ).Collect();
+                    commaSplitter.PipeFlow(
+                        newlineAggr.PipeFlow(
+                            adapter.Flow())))
+                .Collect();
             return objects.Count == 3
                 && ((dynamic)objects.ElementAt(0)).Id.Equals("0")
                 && ((dynamic)objects.ElementAt(0)).Name.Equals("Foo")
@@ -586,8 +599,8 @@ namespace FlowAI
 
             // As for our flow network, we just need to recursively transform a string until the mapping does nothing!
             IProducerConsumerCollection<string> ret =
-                await rewriter.PipeFlow(rewriter,                // So we pipe the rewriter's flow
-                    rewriter.PipeFlow(rewriter,                  // to its own flow after it has consumed
+                await rewriter.PipeFlow(                         // So we pipe the rewriter's flow
+                    rewriter.PipeFlow(                           // to its own flow after it has consumed
                         new[] { "_1011_" }                       // the input droplet _1011_
                     )
                 ).Collect();
@@ -602,21 +615,21 @@ namespace FlowAI
             var not = new DropletTransformer<bool, bool>(a => !a);
 
             Func<bool, bool, bool> op_and = (a, b) => a && b;
-            Func<bool, bool, bool> op_or  = (a, b) => a || b;
-            Func<bool, bool, bool> op_xor = (a, b) => a ^  b;
-            Func<bool, bool, bool> op_nand= (a, b) => !(a && b);
+            Func<bool, bool, bool> op_or = (a, b) => a || b;
+            Func<bool, bool, bool> op_xor = (a, b) => a ^ b;
+            Func<bool, bool, bool> op_nand = (a, b) => !(a && b);
             Func<bool, bool, bool> op_nor = (a, b) => !(a || b);
             Func<bool, bool, bool> op_xnor = (a, b) => !(a ^ b);
 
             // Make a machine that evaluates the function: (A and (B or ((B xor D) and C)))
             var A = new FlowVariable<bool>(false);
-            var B = new FlowVariable<bool>(true );
+            var B = new FlowVariable<bool>(true);
             var C = new FlowVariable<bool>(false);
-            var D = new FlowVariable<bool>(true );
+            var D = new FlowVariable<bool>(true);
 
-            ReducingFlowOutputJunction<bool> xor_gate  = Gate(op_xor, () => B.Flow(), () => D.Flow());
+            ReducingFlowOutputJunction<bool> xor_gate = Gate(op_xor, () => B.Flow(), () => D.Flow());
             ReducingFlowOutputJunction<bool> and_gate1 = Gate(op_and, () => xor_gate.Flow(), () => C.Flow());
-            ReducingFlowOutputJunction<bool> or_gate   = Gate(op_or,  () => B.Flow(), () => and_gate1.Flow());
+            ReducingFlowOutputJunction<bool> or_gate = Gate(op_or, () => B.Flow(), () => and_gate1.Flow());
             ReducingFlowOutputJunction<bool> and_gate2 = Gate(op_and, () => A.Flow(), () => or_gate.Flow());
 
             // This example demonstrates a new usage pattern with FlowVariables being changed after each drip
@@ -644,8 +657,8 @@ namespace FlowAI
             }
         }
         // Creates a pre-trained neuron-based binary gate and tests that it works
-        [Repeat(times: 98, DebugTimes = 9)]
-        [Test("Neural Boolean gate")]
+        [Repeat(times: 98, DebugTimes = 0)]
+        [Test("Neural Boolean gate", Suite = "Neural")]
         static async Task<bool> TestNeuron1()
         {
             const int epochs = 1000;
@@ -663,8 +676,7 @@ namespace FlowAI
             _ = neuron.Train(trainingSequence.Sequence, epochs: epochs, learningRate: lr)
                 .ToArray();
 
-            Func<Task<bool>> predictAndCheck = async () => (await neuron.PipeFlow(null,
-                trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count).Select(x => x.Inputs)
+            Func<Task<bool>> predictAndCheck = async () => (await neuron.PipeFlow(trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count).Select(x => x.Inputs)
             )
             .Collect())
             //.DebugPrint("{0:0.00} ")
@@ -674,8 +686,8 @@ namespace FlowAI
             return ret;
         }
         // Creates a more advanced neuron that is trained from another flow component
-        [Repeat(times: 98, DebugTimes = 9)]
-        [Test("Neural Flow interfaces")]
+        [Repeat(times: 98, DebugTimes = 0)]
+        [Test("Neural Flow interfaces", Suite = "Neural")]
         static async Task<bool> TestNeuron2()
         {
             const int epochs = 100;
@@ -699,22 +711,20 @@ namespace FlowAI
             });
             // The neuron is trained by filling its dedicated TrainingBuffer first
             Func<IAsyncEnumerator<double>> trainAndPredict = () =>
-                neuron.TrainingBuffer.ConsumeFlow(trainingSequence,
-                    trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count))
+                neuron.TrainingBuffer.ConsumeFlow(trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count))
             // Then it is used to make predictions by piping the test sequence into it
                 .Redirect(
-                    neuron.PipeFlow(testSequence,
-                        testSequence.Flow(maxDroplets: testSequence.Sequence.Count)));
+                    neuron.PipeFlow(testSequence.Flow(maxDroplets: testSequence.Sequence.Count)));
             // If the neuron works, then its predictions should be the same as the training examples
-           
+
             bool ret = (await trainAndPredict().Collect()).Select(s => s > 0.5 ? 1.0 : 0.0).SequenceEqual(trainingSequence.Sequence.Select(s => s.Output));
             ret &= neuron.TotalTimesTrained == epochs * trainingSequence.Sequence.Count;
 
             return ret;
         }
-        // Creates a simple layer of neurons
-        [Repeat(times: 98, DebugTimes = 9)]
-        [Test("Individual Neuron Layer")]
+        // Creates a simple layer of neurons that trains 3 binary gates
+        [Repeat(times: 98, DebugTimes = 0)]
+        [Test("Individual Neuron Layer", Suite = "Neural")]
         static async Task<bool> TestNeuron3()
         {
             const int epochs = 1000;
@@ -743,20 +753,18 @@ namespace FlowAI
             });
 
             // Exactly the same interface as individual neurons
-
             Func<IAsyncEnumerator<double[]>> trainAndPredict = () =>
-                layer.TrainingBuffer.ConsumeFlow(trainingSequence,
-                    trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count))
+                layer.TrainingBuffer.ConsumeFlow(trainingSequence.Flow(maxDroplets: trainingSequence.Sequence.Count))
                 .Redirect(
-                    layer.PipeFlow(testSequence,
-                        testSequence.Flow(maxDroplets: testSequence.Sequence.Count)));
+                    layer.PipeFlow(testSequence.Flow(maxDroplets: testSequence.Sequence.Count)));
 
-            var pred = (await trainAndPredict().Collect());
-            bool ret = pred.Select((p, i) => p.Select(s => s > 0.5 ? 1.0 : 0.0).SequenceEqual(trainingSequence.Sequence[i].Output)).All(x => x);
+            bool ret = (await trainAndPredict().Collect())
+                .Select((p, i) => p.Select(s => s > 0.6 ? 1.0 : 0.0).SequenceEqual(trainingSequence.Sequence[i].Output)).All(x => x);
 
             return ret;
         }
-        [Test("Neural Network XOR")]
+        // Tests a 2-1 neural network in a classification task by asking it to predict the XOR table.
+        [Test("Neural Network XOR", Suite = "Neural", Color = ConsoleColor.Cyan)]
         [Repeat(times: 8, DebugTimes = 0)]
         static async Task<bool> TestNeuralNet1()
         {
@@ -765,12 +773,16 @@ namespace FlowAI
             const double tolerance = 0.1;
 
             var net = new FlowNeuralNetwork(
-                nInputs: 2, 
+                nInputs: 2,
+                // As it turns out, Tanh is much better than the Sigmoid, especially at this task.
+                // The Sigmoid works, but occasionally the test fails as it gets stuck on local minima.
                 layerDef: new[] { (2, ActivationFunction.HyperbolicTangent), (1, ActivationFunction.HyperbolicTangent) },
-                learningRate: lr, 
+                learningRate: lr,
                 trainingEpochs: epochs
             );
 
+            // The XOR truth table is not solvable by an individual neuron, which is a linear classifier.
+            // The minimum required configuration is a 2-1 network, so this problem is perfect for testing its robustness.
             await net.Train(new[] {
                 (new[]{ 0.0, 0.0 }, new[]{ -1.00 }),
                 (new[]{ 0.0, 1.0 }, new[]{ 1.00 }),
@@ -782,19 +794,108 @@ namespace FlowAI
             Func<double[], Task<double>> predict = async (double[] d) =>
             {
                 input.Value = d;
-                return (await net.PipeFlow(input, input.Flow(maxDroplets: 1)).Collect())
-                    //.DebugPrint(d => $"{String.Join(", ", d.Select(_d => _d.ToString("0.00")).ToArray())}")
+                return (await net.PipeFlow(input.Flow(maxDroplets: 1)).Collect())
                     .Single()[0];
             };
 
-            //DebugPrint("");
             bool
-            ret  = await predict(new[] { 0.0, 0.0 }) <= -1 + tolerance;
+            ret = await predict(new[] { 0.0, 0.0 }) <= -1 + tolerance;
             ret &= await predict(new[] { 0.0, 1.0 }) >= 1 - tolerance;
             ret &= await predict(new[] { 1.0, 0.0 }) >= 1 - tolerance;
             ret &= await predict(new[] { 1.0, 1.0 }) <= -1 + tolerance;
 
             return ret;
+        }
+
+        // 
+        [Test("Ant Brain", Suite = "Ant-Sim")]
+        static async Task<bool> TestAntBrain()
+        {
+            const double p = 0.25;
+            const int mem = 3;
+
+            var rng = new Random(1);
+            var ant = (
+                Brain: new FlowNeuralNetwork(
+                    nInputs: 4 * mem,
+                    // Inputs correspond to the three tiles in front of the ant from left to right; 0 = solid; 1 = passable.
+                    // The outputs are two numbers between -1 and 1. The first controls rotation, the second controls direction (fwd/bwd).
+                    layerDef: new[] { (6, ActivationFunction.HyperbolicTangent), (3, ActivationFunction.HyperbolicTangent), (2, ActivationFunction.HyperbolicTangent) },
+                    learningRate: 0.15,
+                    // This network is trained in real time: whenever the ant hits an obstacles due to a bad prediction, it will retrain on the last input and the opposite result.
+                    // Likewise, whenever the ant does not hit an obstacle, it is rewarded by training on that specific input value.
+                    trainingEpochs: 1
+                ),
+                Memory: new CyclicFlowBuffer<double[]>(mem),
+                X: 4, 
+                Y: 10, 
+                Rotation: 0,
+                Forward: 1
+            );
+            await ant.Memory.ConsumeFlow(Enumerable.Range(0, mem).Select(i => new[] { rng.NextDouble(), rng.NextDouble(), rng.NextDouble(), rng.NextDouble() }).GetAsyncEnumerator()).Collect();
+
+            var world = Enumerable.Range(0, 20)
+                .Select(i => Enumerable.Range(0, 20)
+                        .Select(j => rng.NextDouble())
+                        .ToArray())
+                .ToArray();
+            world[ant.Y][ant.X] = 1;
+
+            while(true)
+            {
+                double[] tilesInFront = GetTilesInFront(ant.X, ant.Y, ant.Rotation, world);
+                var input = ant.Memory.Contents.SelectMany(a => a).ToArray();
+
+                await ant.Memory.ConsumeDroplet(tilesInFront.Append(ant.Rotation / 360.0).ToArray());
+                var prediction = (await ant.Brain.PipeFlow(new[] { input }).Collect()).Single();
+                var (pRotation, pDirection) = (prediction[0], prediction[1]);
+
+                Console.Clear();
+                var sb = new StringBuilder();
+                for (int i = 0; i < world.Length; i++)
+                {
+                    for (int j = 0; j < world[i].Length; j++)
+                    {
+                        if(ant.X == i && ant.Y == j)
+                        {
+                            sb.Append('@');
+                        }
+                        else
+                        {
+                            sb.Append(world[i][j] < 0.25 ? '#' : ' ');
+                        }
+                    }
+                    sb.Append('\n');
+                }
+                //sb.Append($"Position: {ant.X}, {ant.Y}, ({ant.LastX}, {ant.LastY});\nDirection: {ant.Rotation};\nInput: {String.Join(", ", tilesInFront)}\nPrediction: {prediction:0.00} ({adjustedPrediction:0.00})");
+                Console.Write(sb.ToString());
+                await Task.Delay(10);
+            }
+
+            static double Radians(double deg)
+            {
+                return deg * Math.PI / 180;
+            }
+
+            static double Sign(double prediction, double p)
+            {
+                if (Math.Abs(prediction) <= p) return 0;
+                return prediction < 0 ? -1 : 1;
+            }
+
+            static double[] GetTilesInFront(int x, int y, double dir, double[][] world)
+            {
+                var a = Radians(dir - 45);
+                var b = Radians(dir);
+                var c = Radians(dir + 45);
+                var p = (X: (int)(x + Math.Cos(a)), Y: (int)(y + Math.Sin(a)));
+                var q = (X: (int)(x + Math.Cos(b)), Y: (int)(y + Math.Sin(b)));
+                var r = (X: (int)(x + Math.Cos(c)), Y: (int)(y + Math.Sin(c)));
+
+                return new[] { p, q, r }
+                    .Select(x => x.X < 0 || x.Y < 0 || x.X >= world.Length || x.Y >= world[x.X].Length ? 0d : world[x.X][x.Y])
+                    .ToArray();
+            }
         }
     }
 }

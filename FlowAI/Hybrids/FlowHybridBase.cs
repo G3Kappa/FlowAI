@@ -13,20 +13,20 @@ namespace FlowAI.Hybrids
     /// </summary>
     public abstract class FlowHybridBase<TInput, TOutput> : FlowProducerBase<TOutput>, IFlowConsumer<TInput>
     {
-        public abstract Task<bool> ConsumeDroplet(IFlowProducer<TInput> producer, TInput droplet);
-        public abstract IAsyncEnumerator<bool> ConsumeFlow(IFlowProducer<TInput> producer, IAsyncEnumerator<TInput> flow);
+        public abstract Task<bool> ConsumeDroplet(TInput droplet);
+        public abstract IAsyncEnumerator<bool> ConsumeFlow(IAsyncEnumerator<TInput> flow);
 
         /// <summary>
         /// Pipes an input flow into this component, then returns the piped output flow.
         /// </summary>
-        public virtual IAsyncEnumerator<TOutput> PipeFlow(IFlowProducer<TInput> producer, IAsyncEnumerator<TInput> flow, Predicate<TOutput> stop = null, int maxDroplets = 0)
+        public virtual IAsyncEnumerator<TOutput> PipeFlow(IAsyncEnumerator<TInput> flow, Predicate<TOutput> stop = null, int maxDroplets = 0)
         {
             // The default implementation is 1-1 dripping, while FlowMachines have a tailored and more efficient nInputs:nOutputs flowing implementation.
             return new AsyncEnumerator<TOutput>(async yield =>
             {
                 await flow.ForEachAsync(async t =>
                 {
-                    await ConsumeDroplet(producer, t);
+                    await ConsumeDroplet(t);
                     TOutput ret = await Drip();
                     if (!IsFlowStarted || (stop?.Invoke(ret) ?? false) || --maxDroplets == 0)
                     {
@@ -37,24 +37,24 @@ namespace FlowAI.Hybrids
             });
         }
 
-        public IAsyncEnumerator<TOutput> PipeFlow(IFlowProducer<TInput> producer, IEnumerable<TInput> source, Predicate<TOutput> stop = null, int maxDroplets = 0)
+        public IAsyncEnumerator<TOutput> PipeFlow(IEnumerable<TInput> source, Predicate<TOutput> stop = null, int maxDroplets = 0)
         {
-            return PipeFlow(producer, source.GetAsyncEnumerator(), stop, maxDroplets);
+            return PipeFlow(source.GetAsyncEnumerator(), stop, maxDroplets);
         }
 
-        public IAsyncEnumerator<TOutput> PipeFlow(IFlowProducer<TInput> producer, Func<IAsyncEnumerator<TInput>> flowStarter, Predicate<TOutput> stop = null, int maxDroplets = 0)
+        public IAsyncEnumerator<TOutput> PipeFlow(Func<IAsyncEnumerator<TInput>> flowStarter, Predicate<TOutput> stop = null, int maxDroplets = 0)
         {
-            return PipeFlow(producer, flowStarter(), stop, maxDroplets);
+            return PipeFlow(flowStarter(), stop, maxDroplets);
         }
 
         /// <summary>
         /// Pipes an input flow into this component until it runs dry, then returns the output flow.
         /// </summary>
-        public IAsyncEnumerator<TOutput> KickstartFlow(IFlowProducer<TInput> producer, IAsyncEnumerator<TInput> flow, Predicate<TOutput> pipeStop = null, int pipeMaxDroplets = 0, Predicate<TOutput> stop = null, int maxDroplets = 0)
+        public IAsyncEnumerator<TOutput> KickstartFlow(IAsyncEnumerator<TInput> flow, Predicate<TOutput> pipeStop = null, int pipeMaxDroplets = 0, Predicate<TOutput> stop = null, int maxDroplets = 0)
         {
             return new AsyncEnumerator<TOutput>(async yield =>
             {
-                await PipeFlow(producer, flow, pipeStop, pipeMaxDroplets).ForEachAsync(async t =>
+                await PipeFlow(flow, pipeStop, pipeMaxDroplets).ForEachAsync(async t =>
                 {
                     await yield.ReturnAsync(t);
                 });
@@ -65,9 +65,9 @@ namespace FlowAI.Hybrids
                 });
             });
         }
-        public IAsyncEnumerator<TOutput> KickstartFlow(IFlowProducer<TInput> producer, IEnumerable<TInput> source, Predicate<TOutput> pipeStop = null, int pipeMaxDroplets = 0, Predicate<TOutput> stop = null, int maxDroplets = 0)
+        public IAsyncEnumerator<TOutput> KickstartFlow(IEnumerable<TInput> source, Predicate<TOutput> pipeStop = null, int pipeMaxDroplets = 0, Predicate<TOutput> stop = null, int maxDroplets = 0)
         {
-            return KickstartFlow(producer, source.GetAsyncEnumerator(), pipeStop, pipeMaxDroplets, stop, maxDroplets);
+            return KickstartFlow(source.GetAsyncEnumerator(), pipeStop, pipeMaxDroplets, stop, maxDroplets);
         }
 
 
