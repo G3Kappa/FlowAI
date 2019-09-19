@@ -808,94 +808,98 @@ namespace FlowAI
         }
 
         // 
-        [Test("Ant Brain", Suite = "Ant-Sim")]
-        static async Task<bool> TestAntBrain()
+        [Test("Flappy Bird", Suite = "Sims", Color = ConsoleColor.Red)]
+        static async Task<bool> TestFlappyBird()
         {
-            const double p = 0.25;
-            const int mem = 3;
-
-            var rng = new Random(1);
-            var ant = (
+            var cur = (CursorLeft: 0, CursorTop: Console.CursorTop + 1);
+            var globals = new {
+                MaxScore = 30,
+                MaxTime = 60 * 1000,
+                TimeStep = 16,
+                MapWidth = 40,
+                MapHeight = 20,
+                Sigma = 0.5
+            };
+            var goals = new {
+                ScoreWin = (Func<int, bool>)(s => s >= globals.MaxScore),
+                TimeUp   = (Func<int, bool>)(t => t >= globals.MaxTime),
+            };
+            var state = (
+                Time: 0, 
+                Score: 0, 
+                Speed: 0.0, 
+                PlayerY: globals.MapHeight / 2, 
+                Rng: new Random(0),
                 Brain: new FlowNeuralNetwork(
-                    nInputs: 4 * mem,
-                    // Inputs correspond to the three tiles in front of the ant from left to right; 0 = solid; 1 = passable.
-                    // The outputs are two numbers between -1 and 1. The first controls rotation, the second controls direction (fwd/bwd).
-                    layerDef: new[] { (6, ActivationFunction.HyperbolicTangent), (3, ActivationFunction.HyperbolicTangent), (2, ActivationFunction.HyperbolicTangent) },
-                    learningRate: 0.15,
-                    // This network is trained in real time: whenever the ant hits an obstacles due to a bad prediction, it will retrain on the last input and the opposite result.
-                    // Likewise, whenever the ant does not hit an obstacle, it is rewarded by training on that specific input value.
-                    trainingEpochs: 1
-                ),
-                Memory: new CyclicFlowBuffer<double[]>(mem),
-                X: 4, 
-                Y: 10, 
-                Rotation: 0,
-                Forward: 1
+                    nInputs: 4,
+                    layerDef: new[] { (2, ActivationFunction.SigmoidLogistic), (4, ActivationFunction.HyperbolicTangent), (1, ActivationFunction.HyperbolicTangent) },
+                    learningRate: 0.25,
+                    trainingEpochs: 1)
             );
-            await ant.Memory.ConsumeFlow(Enumerable.Range(0, mem).Select(i => new[] { rng.NextDouble(), rng.NextDouble(), rng.NextDouble(), rng.NextDouble() }).GetAsyncEnumerator()).Collect();
 
-            var world = Enumerable.Range(0, 20)
-                .Select(i => Enumerable.Range(0, 20)
-                        .Select(j => rng.NextDouble())
-                        .ToArray())
-                .ToArray();
-            world[ant.Y][ant.X] = 1;
-
-            while(true)
+            var _lastPipe = -1;
+            while(!goals.TimeUp(state.Time) && !goals.ScoreWin(state.Score))
             {
-                double[] tilesInFront = GetTilesInFront(ant.X, ant.Y, ant.Rotation, world);
-                var input = ant.Memory.Contents.SelectMany(a => a).ToArray();
+                int i = state.Time / globals.TimeStep;
+                var pipe = (
+                    Id: (int)(i * state.Speed) / globals.MapWidth,
+                    X: globals.MapWidth - (int)(i * state.Speed) % globals.MapWidth - 1,
+                    HoleY: 0,
+                    HoleH: 0
+                );
+                state.Rng = new Random(pipe.Id);
+                pipe.HoleY = state.Rng.Next(1, globals.MapHeight - 2);
+                pipe.HoleH = state.Rng.Next(2, (globals.MapHeight - pipe.HoleY) / 2 + 1);
 
-                await ant.Memory.ConsumeDroplet(tilesInFront.Append(ant.Rotation / 360.0).ToArray());
-                var prediction = (await ant.Brain.PipeFlow(new[] { input }).Collect()).Single();
-                var (pRotation, pDirection) = (prediction[0], prediction[1]);
-
-                Console.Clear();
-                var sb = new StringBuilder();
-                for (int i = 0; i < world.Length; i++)
+                if(i % 2 == 0 && state.PlayerY < globals.MapHeight - 1)
                 {
-                    for (int j = 0; j < world[i].Length; j++)
-                    {
-                        if(ant.X == i && ant.Y == j)
-                        {
-                            sb.Append('@');
-                        }
-                        else
-                        {
-                            sb.Append(world[i][j] < 0.25 ? '#' : ' ');
-                        }
-                    }
-                    sb.Append('\n');
+                    state.PlayerY++; // Gravity
                 }
-                //sb.Append($"Position: {ant.X}, {ant.Y}, ({ant.LastX}, {ant.LastY});\nDirection: {ant.Rotation};\nInput: {String.Join(", ", tilesInFront)}\nPrediction: {prediction:0.00} ({adjustedPrediction:0.00})");
-                Console.Write(sb.ToString());
-                await Task.Delay(10);
+
+
+                var input = new[] {
+                    state.PlayerY / (double)globals.MapHeight,
+                    pipe.HoleY / (double)globals.MapHeight,
+                    (pipe.HoleY + pipe.HoleH) / (double)globals.MapHeight,
+                    pipe.X / (double)globals.MapWidth
+                };
+                var prediction = state.Brain.PipeFlow(new[] { input })
+                    .CollectSync()
+                    .Single()[0];
+                
+                if (prediction < -globals.Sigma && state.PlayerY > 0)
+                {
+                    state.PlayerY--;
+                }
+
+                double error = input[0] - (input[1] + (input[2]-input[1]) / 2);
+                await state.Brain.TrainingBuffer.ConsumeDroplet((input, new[] { prediction - error }));
+
+                Console.SetCursorPosition(cur.CursorLeft, cur.CursorTop);
+                Console.WriteLine($"Score: {state.Score:00} | Speed: {state.Speed:0.0}");
+                for (int j = 0; j < globals.MapHeight; j++)
+                {
+                    char c = j >= pipe.HoleY && j < pipe.HoleY + pipe.HoleH ? ' ' : '#';
+                    var row = (state.PlayerY == j ? '@' : ' ') + (pipe.X <= 1 ? "" : new string(' ', pipe.X - 2)) + c + (pipe.X == globals.MapWidth ? "" : new string(' ', globals.MapWidth - pipe.X));
+                    Console.WriteLine(row);
+                }
+
+                await Task.Delay(globals.TimeStep);
+                state.Time += globals.TimeStep;
+                state.Speed = 0.5 + 0.5 * Math.Pow(state.Time / (double)globals.MaxTime, 2);
+
+                if(pipe.Id != _lastPipe && pipe.X <= 1)
+                {
+                    bool hit = (state.PlayerY < pipe.HoleY || state.PlayerY >= pipe.HoleY + pipe.HoleH);
+                    state.Score += hit ? -1 : 1;
+                    _lastPipe = pipe.Id;
+                }
+                Console.WriteLine($"Network: {String.Join(" -> ", new[] { input.Length }.Concat(state.Brain.Layers.Select(l => l.Neurons.Length)))}");
+                Console.WriteLine($"Input: [{ String.Join(", ", input.Select(i => i.ToString("0.00")))}] ");
+                Console.WriteLine($"Error: {error:0.00} | Prediction: {prediction:0.00}  ");
             }
 
-            static double Radians(double deg)
-            {
-                return deg * Math.PI / 180;
-            }
-
-            static double Sign(double prediction, double p)
-            {
-                if (Math.Abs(prediction) <= p) return 0;
-                return prediction < 0 ? -1 : 1;
-            }
-
-            static double[] GetTilesInFront(int x, int y, double dir, double[][] world)
-            {
-                var a = Radians(dir - 45);
-                var b = Radians(dir);
-                var c = Radians(dir + 45);
-                var p = (X: (int)(x + Math.Cos(a)), Y: (int)(y + Math.Sin(a)));
-                var q = (X: (int)(x + Math.Cos(b)), Y: (int)(y + Math.Sin(b)));
-                var r = (X: (int)(x + Math.Cos(c)), Y: (int)(y + Math.Sin(c)));
-
-                return new[] { p, q, r }
-                    .Select(x => x.X < 0 || x.Y < 0 || x.X >= world.Length || x.Y >= world[x.X].Length ? 0d : world[x.X][x.Y])
-                    .ToArray();
-            }
+            return goals.ScoreWin(state.Score);
         }
     }
 }
