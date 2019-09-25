@@ -936,9 +936,17 @@ namespace FlowAI
                     Direction: 0,
                     _LastDirection: 0,
                     Brain: new FlowNeuralNetwork(
-                        nInputs: 2,
-                        layerDef: new[] { (2, ActivationFunction.HyperbolicTangent), (3, ActivationFunction.HyperbolicTangent), (1, ActivationFunction.HyperbolicTangent) },
-                        learningRate: 0.8,
+                        nInputs: globals.Map.Cells.Length + 1,
+                        layerDef: new[] {
+                            (64, ActivationFunction.Identity),
+                            (32, ActivationFunction.HyperbolicTangent),
+                            (16, ActivationFunction.HyperbolicTangent),
+                            (8, ActivationFunction.HyperbolicTangent),
+                            (4, ActivationFunction.SigmoidLogistic),
+                            (16, ActivationFunction.SigmoidLogistic),
+                            (32, ActivationFunction.SigmoidLogistic),
+                            (1, ActivationFunction.Identity) },
+                        learningRate: 1.05,
                         trainingEpochs: 1)),
                 Food: (X: 0, Y: 0),
                 Rng: new Random(0)
@@ -947,52 +955,6 @@ namespace FlowAI
             Reset();
             while (!goals.TimeUp(state.Time) && !goals.ScoreWin(state.Score))
             {
-                if(state.Time / globals.TimeStep % globals.MoveStep == 0)
-                {
-                     var distBeforeMoving = Distance(state.Snake.Body[0], state.Food);
-                    var inputs = GetInputs();
-                    var newDir = Predict(inputs);
-                    state.Snake.Direction = (int)(newDir * 4);
-
-                    if (MoveOrReset())
-                    {
-                        var distAfterMoving = Distance(state.Snake.Body[0], state.Food);
-                        if (distAfterMoving < distBeforeMoving)
-                        {
-                            await state.Snake.Brain.TrainingBuffer.ConsumeDroplet((inputs, new[] { newDir }));
-                        }
-                        else if(distAfterMoving > distBeforeMoving)
-                        {
-                            var bestDir = Enumerable.Range(0, 4)
-                                .Select(d =>
-                                {
-                                    var p = TileAhead(state.Snake.Body[0], d);
-                                    if(HitsBody(p) || HitsWall(p))
-                                    {
-                                        p = (100000, 100000);
-                                    }
-                                    return (D: d, P: p);
-                                })
-                                .OrderBy(t => Distance(t.P, state.Food))
-                                .First().D;
-
-                            await state.Snake.Brain.TrainingBuffer.ConsumeDroplet((inputs, new[] { bestDir / 4.0 }));
-                        }
-                    }
-                    else
-                    {
-                        await state.Snake.Brain.TrainingBuffer.ConsumeDroplet((inputs, new[] { Mod((int)(newDir * 4) + 2, 4) / 4.0 }));
-                    }
-                    Console.SetCursorPosition(cur.CursorLeft, cur.CursorTop + globals.Map.Height);
-                    Console.WriteLine($"Inputs: [{String.Join(", ", inputs.Select(x => x.ToString("0.00")))}]");
-                    Console.WriteLine($"Output: {newDir:0.00}");
-                    Console.WriteLine($"");
-                    Console.WriteLine($"Score: {state.Score}");
-                }
-                else
-                {
-                    MoveOrReset();
-                }
 
                 if (state.Snake.Body[0].Equals(state.Food))
                 {
@@ -1001,7 +963,37 @@ namespace FlowAI
                     PlaceFood();
                 }
 
-                Draw();
+                var inputs = GetInputs();
+                var newDir = Predict(inputs);
+                state.Snake.Direction = (int)(newDir * 4);
+                MoveOrReset();
+                var bestDir = Enumerable.Range(0, 4)
+                    .Select(d =>
+                    {
+                        var p = TileAhead(state.Snake.Body[0], d);
+                        if (HitsBody(p) || HitsWall(p))
+                        {
+                            p = (100000, 100000);
+                        }
+                        return (D: d, P: p);
+                    })
+                    .OrderBy(t => Distance(t.P, state.Food))
+                    .First().D;
+
+                if(bestDir != state.Snake.Direction)
+                {
+                    await state.Snake.Brain.TrainingBuffer.ConsumeDroplet((inputs, new[] { bestDir / 4.0 + 0.125 }));
+                }
+                var bestTile = TileAhead(state.Snake.Body[0], bestDir);
+
+                Console.SetCursorPosition(cur.CursorLeft, cur.CursorTop + globals.Map.Height);
+                Console.WriteLine($"Inputs: [{String.Join(", ", inputs.Select(x => x.ToString("0.00")))}]");
+                Console.WriteLine($"Output: {newDir:0.00}");
+                Console.WriteLine($"");
+                Console.WriteLine($"Score: {state.Score}");
+
+                Draw(state.Snake.Body[0], bestTile);
+
                 await Task.Delay(globals.TimeStep);
                 state.Time += globals.TimeStep;
                 state.Snake._LastDirection = state.Snake.Direction;
@@ -1018,9 +1010,28 @@ namespace FlowAI
             }
             double[] GetInputs()
             {
+                return globals.Map.Cells.Select((c, i) =>
+                {
+                    var xy = (i % globals.Map.Width, i / globals.Map.Width);
+                    if(xy.Equals(state.Food))
+                    {
+                        return 10.0;
+                    }
+                    if(xy.Equals(state.Snake.Body[0]))
+                    {
+                        return 1;
+                    }
+                    if (HitsBody(xy) || HitsWall(xy))
+                    {
+                        return -10.0;
+                    }
+                    return 0.0;
+                }).Select(x => x + (state.Rng.NextDouble() * 2 - 1) * 0.0).Prepend(state.Snake.Direction / 4.0).ToArray();
+
                 return new[] {
                     (state.Food.X - state.Snake.Body[0].X) / (double)globals.Map.Width,
                     (state.Food.Y - state.Snake.Body[0].Y) / (double)globals.Map.Height,
+                    state.Snake.Direction / 4.0,
 
                     //state.Food.X / (double)globals.Map.Width,
                     //state.Food.Y / (double)globals.Map.Height,
@@ -1034,7 +1045,7 @@ namespace FlowAI
                     //HitsWall(TileAhead()) ? 1 : 0,
                 };
             }
-            void Draw()
+            void Draw((int X, int Y) pred, (int X, int Y) best)
             {
                 var sb = new StringBuilder();
                 for (int y = 0; y < globals.Map.Height; y++)
@@ -1044,8 +1055,15 @@ namespace FlowAI
                         var snakeHere = state.Snake.Body.Any(p => p.Equals((x, y)));
                         var wallHere = globals.Map.Cells[x + globals.Map.Width * y] == 0;
                         var foodHere = state.Food.Equals((x, y));
-                        switch(snakeHere)
+                        var predHere = pred.Equals((x, y));
+                        var bestHere = best.Equals((x, y));
+
+                        switch (snakeHere)
                         {
+                            case false when predHere:
+                                sb.Append('*'); break;
+                            case false when bestHere:
+                                sb.Append('+'); break;
                             case true when foodHere:
                                 sb.Append('O'); break;
                             case false when foodHere:
@@ -1072,7 +1090,7 @@ namespace FlowAI
                     /* HEAD -> */ (3, 0), (2, 0), (1, 0), (0, 0) /* <- TAIL */,
                 });
                 Enumerable.Range(0, globals.Map.Cells.Length)
-                    .Select(i => globals.Map.Cells[i] = state.Rng.NextDouble() < 0.00 ? 0 : 1)
+                    .Select(i => globals.Map.Cells[i] = state.Rng.NextDouble() < 0.01 ? 0 : 1)
                     .Count();
                 PlaceFood();
             }

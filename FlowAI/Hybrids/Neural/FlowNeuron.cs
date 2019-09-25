@@ -48,7 +48,7 @@ namespace FlowAI.Hybrids.Neural
             x => 1 / (1 + Math.Pow(Math.E, -x))
         );
 
-        public static ActivationFunction Rectifier = new ActivationFunction(
+        public static ActivationFunction ReLU = new ActivationFunction(
             x => Math.Max(0, x),
             x => x > 0 ? 1 : 0
         );
@@ -82,13 +82,6 @@ namespace FlowAI.Hybrids.Neural
         {
             double prediction = Activate(data.input)[0];
             return (data.target - prediction) * Activation.Call(prediction, derivative: true);
-        }
-
-        public static double Fitness(double prediction, Func<double> fitnessFunction, double min=0, double max=1)
-        {
-            var rand = Rng.NextDouble() * (max - min) + min;
-            var fit = fitnessFunction();
-            return (1 - fit) * rand + fit * prediction;
         }
 
         public double Train((double[] input, double target) data, double learningRate = 1)
