@@ -23,7 +23,6 @@ namespace FlowAI.Hybrids.Neural
         public int TrainingBufferEpochs { get; private set; }
         public double TrainingBufferLearningRate { get; private set; }
         public int TotalTimesTrained { get; private set; }
-
         public FlowNeuralNetwork(int nInputs, (int Neurons, ActivationFunction Activation)[] layerDef, double learningRate, int trainingEpochs) 
             : base(null, (i, o) => i.All(x => x.Length == nInputs), nInputs)
         {

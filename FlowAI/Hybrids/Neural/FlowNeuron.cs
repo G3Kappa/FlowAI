@@ -84,6 +84,13 @@ namespace FlowAI.Hybrids.Neural
             return (data.target - prediction) * Activation.Call(prediction, derivative: true);
         }
 
+        public static double Fitness(double prediction, Func<double> fitnessFunction, double min=0, double max=1)
+        {
+            var rand = Rng.NextDouble() * (max - min) + min;
+            var fit = fitnessFunction();
+            return (1 - fit) * rand + fit * prediction;
+        }
+
         public double Train((double[] input, double target) data, double learningRate = 1)
         {
             double err = Error(data);

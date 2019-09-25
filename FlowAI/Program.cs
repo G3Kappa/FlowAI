@@ -19,6 +19,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -151,14 +152,24 @@ namespace FlowAI
             var testsBySuite = GetTests().GroupBy(t => t.Suite).ToArray();
             var suite = "Default";
             var input = "";
+            var skip = 0;
             if (testsBySuite.Length > 1)
             {
                 Console.WriteLine($"Choose test suite [{String.Join("|", testsBySuite.Select(t => t.Key).Append("All").ToArray())}]: ");
                 input = Console.ReadLine();
+                var m = Regex.Match(input, @"(\w+)(?:\s+s(?:kip)?\s*(\d+))?");
+                if(m.Success)
+                {
+                    input = m.Groups[1].Success ? m.Groups[1].Value : input;
+                    skip = m.Groups[2].Success ? int.Parse(m.Groups[2].Value) : 0;
+                }
                 suite = testsBySuite.FirstOrDefault(t => t.Key.StartsWith(input, StringComparison.OrdinalIgnoreCase))?.Key ?? suite;
             }
 
-            foreach (var (Method, Name, _) in testsBySuite.Where(t => input.Equals("All", StringComparison.OrdinalIgnoreCase) || t.Key.Equals(suite, StringComparison.OrdinalIgnoreCase)).SelectMany (t => t.AsEnumerable()))
+            foreach (var (Method, Name, _) in testsBySuite
+                .Where(t => input.Equals("All", StringComparison.OrdinalIgnoreCase) || t.Key.Equals(suite, StringComparison.OrdinalIgnoreCase))
+                .SelectMany(t => t.AsEnumerable())
+                .Skip(skip))
             {
                 (passed_tests, total_tests) = await RunTest($"Test {total_tests + 1:00}: {Name.PadRight(27)}", Method, passed_tests, total_tests);
             }
@@ -832,8 +843,8 @@ namespace FlowAI
                 Rng: new Random(0),
                 Brain: new FlowNeuralNetwork(
                     nInputs: 4,
-                    layerDef: new[] { (2, ActivationFunction.SigmoidLogistic), (4, ActivationFunction.HyperbolicTangent), (1, ActivationFunction.HyperbolicTangent) },
-                    learningRate: 0.25,
+                    layerDef: new[] { (8, ActivationFunction.HyperbolicTangent), (1, ActivationFunction.HyperbolicTangent) },
+                    learningRate: 0.5,
                     trainingEpochs: 1)
             );
 
@@ -873,7 +884,7 @@ namespace FlowAI
                     state.PlayerY--;
                 }
 
-                double error = input[0] - (input[1] + (input[2]-input[1]) / 2);
+                double error =  (1 - state.Score / (double)globals.MaxScore) * (input[0] - (input[1] + (input[2]-input[1]) / 2));
                 await state.Brain.TrainingBuffer.ConsumeDroplet((input, new[] { prediction - error }));
 
                 if(pipe.Id != _lastPipe && pipe.X <= 1)
@@ -906,12 +917,11 @@ namespace FlowAI
             var cur = (CursorLeft: 0, CursorTop: Console.CursorTop + 1);
             var globals = new
             {
-                MaxScore = 30,
+                MaxScore = 30.0,
                 MaxTime = 60 * 1000,
-                TimeStep = 64,
-                MapWidth = 40,
-                MapHeight = 20,
-                Sigma = 0.5
+                TimeStep = 16,
+                Map = new { Width = 40, Height = 20, Cells = new int[40 * 20] },
+                MoveStep = 1
             };
             var goals = new
             {
@@ -921,118 +931,212 @@ namespace FlowAI
             var state = (
                 Time: 0,
                 Score: 0,
-                Speed: 0.0,
-                Player: (Body: new List<(int X, int Y)>() { (0, 2), (0, 1), (0, 0) }, Direction: 1),
-                Food: (X: globals.MapWidth / 2, Y: globals.MapHeight / 2),
-                Rng: new Random(0),
-                Brain: new FlowNeuralNetwork(
-                    nInputs: 6,
-                    layerDef: new[] { (4, ActivationFunction.HyperbolicTangent), (4, ActivationFunction.HyperbolicTangent), (1, ActivationFunction.HyperbolicTangent) },
-                    learningRate: 0.03,
-                    trainingEpochs: 1)
+                Snake: (
+                    Body: new List<(int X, int Y)>(),
+                    Direction: 0,
+                    _LastDirection: 0,
+                    Brain: new FlowNeuralNetwork(
+                        nInputs: 2,
+                        layerDef: new[] { (2, ActivationFunction.HyperbolicTangent), (3, ActivationFunction.HyperbolicTangent), (1, ActivationFunction.HyperbolicTangent) },
+                        learningRate: 0.8,
+                        trainingEpochs: 1)),
+                Food: (X: 0, Y: 0),
+                Rng: new Random(0)
             );
+
+            Reset();
             while (!goals.TimeUp(state.Time) && !goals.ScoreWin(state.Score))
             {
-                int i = state.Time / globals.TimeStep;
-
-                var input = new[] {
-                    state.Player.Body.First().X / (double)globals.MapWidth,
-                    state.Player.Body.First().Y / (double)globals.MapHeight,
-                    state.Food.X / (double)globals.MapWidth,
-                    state.Food.Y / (double)globals.MapWidth,
-                    state.Player.Body.Count / Math.Max(1.0, globals.MaxScore - 3),
-                    state.Player.Direction / 3.0
-                };
-
-                var newPos = state.Player.Body[0];
-                switch (state.Player.Direction)
+                if(state.Time / globals.TimeStep % globals.MoveStep == 0)
                 {
-                    case 0 when state.Player.Body[0].X > 0:
-                        newPos = (state.Player.Body[0].X - 1, state.Player.Body[0].Y);
-                        break;
-                    case 0 when state.Player.Body[0].X == 0:
-                        newPos =(globals.MapWidth - 1, state.Player.Body[0].Y);
-                        break;
-                    case 1 when state.Player.Body[0].X < globals.MapWidth:
-                        newPos =(state.Player.Body[0].X + 1, state.Player.Body[0].Y);
-                        break;
-                    case 1 when state.Player.Body[0].X >= globals.MapWidth:
-                        newPos =(0, state.Player.Body[0].Y);
-                        break;
-                    case 2 when state.Player.Body[0].Y > 0:
-                        newPos =(state.Player.Body[0].X, state.Player.Body[0].Y - 1);
-                        break;
-                    case 2 when state.Player.Body[0].Y == 0:
-                        newPos =(state.Player.Body[0].X, globals.MapHeight - 1);
-                        break;
-                    case 3 when state.Player.Body[0].Y < globals.MapHeight:
-                        newPos =(state.Player.Body[0].X, state.Player.Body[0].Y + 1);
-                        break;
-                    case 3 when state.Player.Body[0].Y >= globals.MapHeight:
-                        newPos =(state.Player.Body[0].X, 0);
-                        break;
-                }
-                if(!state.Player.Body.Any(p => p.X == newPos.X && p.Y == newPos.Y))
-                {
-                    for (int j = state.Player.Body.Count - 1; j > 0; j--)
+                     var distBeforeMoving = Distance(state.Snake.Body[0], state.Food);
+                    var inputs = GetInputs();
+                    var newDir = Predict(inputs);
+                    state.Snake.Direction = (int)(newDir * 4);
+
+                    if (MoveOrReset())
                     {
-                        state.Player.Body[j] = state.Player.Body[j - 1];
-                    }
-
-                    state.Player.Body[0] = newPos;
-                }
-
-                var prediction = state.Brain.PipeFlow(new[] { input })
-                    .CollectSync()
-                    .Single()[0];
-
-                if (prediction < -globals.Sigma)
-                {
-                    state.Player.Direction--;
-                }
-                else if (prediction > globals.Sigma)
-                {
-                    state.Player.Direction++;
-                }
-                state.Player.Direction = (state.Player.Direction % 4 + 4) % 4;
-
-                var p = (X: state.Food.X - state.Player.Body[0].X, Y: state.Food.Y - state.Player.Body[1].Y);
-                double error = input[5] - (Math.Atan2(p.Y, p.X) * 180 / Math.PI) / 360.0;
-                error *= 1 - Math.Pow(input[0] - input[2] + input[1] - input[3], 2);
-                await state.Brain.TrainingBuffer.ConsumeDroplet((input, new[] { prediction + error }));
-
-                Console.SetCursorPosition(cur.CursorLeft, cur.CursorTop);
-                Console.WriteLine($"Score: {state.Score:00} | Speed: {state.Speed:0.0}");
-                var sb = new StringBuilder();
-                for (int j = 0; j < globals.MapHeight; j++)
-                {
-                    for (int k = 0; k < globals.MapWidth; k++)
-                    {
-                        if(state.Player.Body.Any(p => p.X == k && p.Y == j))
+                        var distAfterMoving = Distance(state.Snake.Body[0], state.Food);
+                        if (distAfterMoving < distBeforeMoving)
                         {
-                            sb.Append('@');
+                            await state.Snake.Brain.TrainingBuffer.ConsumeDroplet((inputs, new[] { newDir }));
                         }
-                        else if (state.Food.X == k && state.Food.Y == j)
+                        else if(distAfterMoving > distBeforeMoving)
                         {
-                            sb.Append('.');
-                        }
-                        else
-                        {
-                            sb.Append(' ');
+                            var bestDir = Enumerable.Range(0, 4)
+                                .Select(d =>
+                                {
+                                    var p = TileAhead(state.Snake.Body[0], d);
+                                    if(HitsBody(p) || HitsWall(p))
+                                    {
+                                        p = (100000, 100000);
+                                    }
+                                    return (D: d, P: p);
+                                })
+                                .OrderBy(t => Distance(t.P, state.Food))
+                                .First().D;
+
+                            await state.Snake.Brain.TrainingBuffer.ConsumeDroplet((inputs, new[] { bestDir / 4.0 }));
                         }
                     }
-                    sb.Append('\n');
+                    else
+                    {
+                        await state.Snake.Brain.TrainingBuffer.ConsumeDroplet((inputs, new[] { Mod((int)(newDir * 4) + 2, 4) / 4.0 }));
+                    }
+                    Console.SetCursorPosition(cur.CursorLeft, cur.CursorTop + globals.Map.Height);
+                    Console.WriteLine($"Inputs: [{String.Join(", ", inputs.Select(x => x.ToString("0.00")))}]");
+                    Console.WriteLine($"Output: {newDir:0.00}");
+                    Console.WriteLine($"");
+                    Console.WriteLine($"Score: {state.Score}");
                 }
-                Console.WriteLine(sb.ToString());
-                Console.WriteLine($"Network: {String.Join(" -> ", new[] { input.Length }.Concat(state.Brain.Layers.Select(l => l.Neurons.Length)))}");
-                Console.WriteLine($"Input: [{ String.Join(", ", input.Select(i => i.ToString("0.00")))}] ");
-                Console.WriteLine($"Error: {error:0.00} | Prediction: {prediction:0.00}  ");
+                else
+                {
+                    MoveOrReset();
+                }
+
+                if (state.Snake.Body[0].Equals(state.Food))
+                {
+                    state.Score++;
+                    state.Snake.Body.Insert(0, state.Snake.Body[0]);
+                    PlaceFood();
+                }
+
+                Draw();
                 await Task.Delay(globals.TimeStep);
                 state.Time += globals.TimeStep;
-                state.Speed = 0.5 + 0.5 * Math.Pow(state.Time / (double)globals.MaxTime, 2);
+                state.Snake._LastDirection = state.Snake.Direction;
             }
 
             return goals.ScoreWin(state.Score);
+            double Predict(double[] inputs)
+            {
+                return state.Snake.Brain.PipeFlow(new[] { inputs })
+                    .CollectSync()
+                    .Single()
+                    .ToArray()
+                    .Single();
+            }
+            double[] GetInputs()
+            {
+                return new[] {
+                    (state.Food.X - state.Snake.Body[0].X) / (double)globals.Map.Width,
+                    (state.Food.Y - state.Snake.Body[0].Y) / (double)globals.Map.Height,
+
+                    //state.Food.X / (double)globals.Map.Width,
+                    //state.Food.Y / (double)globals.Map.Height,
+
+                    // Distance(state.Snake.Body[0], state.Food) / Math.Sqrt(globals.Map.Width * globals.Map.Height),
+
+                    //state.Snake.Direction / 4.0,
+
+                    //state.Score / globals.MaxScore,
+
+                    //HitsWall(TileAhead()) ? 1 : 0,
+                };
+            }
+            void Draw()
+            {
+                var sb = new StringBuilder();
+                for (int y = 0; y < globals.Map.Height; y++)
+                {
+                    for (int x = 0; x < globals.Map.Width; x++)
+                    {
+                        var snakeHere = state.Snake.Body.Any(p => p.Equals((x, y)));
+                        var wallHere = globals.Map.Cells[x + globals.Map.Width * y] == 0;
+                        var foodHere = state.Food.Equals((x, y));
+                        switch(snakeHere)
+                        {
+                            case true when foodHere:
+                                sb.Append('O'); break;
+                            case false when foodHere:
+                                sb.Append('.'); break;
+                            case true when !wallHere:
+                                sb.Append('o'); break;
+                            case false when !wallHere:
+                                sb.Append(' '); break;
+                            case true when wallHere:
+                                sb.Append('X'); break;
+                            case false when wallHere:
+                                sb.Append('#'); break;
+                        }
+                    }
+                    sb.Append("\r\n");
+                }
+                Console.SetCursorPosition(cur.CursorLeft, cur.CursorTop);
+                Console.WriteLine(sb.ToString());
+            }
+            void Reset()
+            {
+                state.Snake.Body.Clear();
+                state.Snake.Body.AddRange(new[] {
+                    /* HEAD -> */ (3, 0), (2, 0), (1, 0), (0, 0) /* <- TAIL */,
+                });
+                Enumerable.Range(0, globals.Map.Cells.Length)
+                    .Select(i => globals.Map.Cells[i] = state.Rng.NextDouble() < 0.00 ? 0 : 1)
+                    .Count();
+                PlaceFood();
+            }
+            void PlaceFood()
+            {
+                do
+                {
+                    state.Food = (X: state.Rng.Next(globals.Map.Width), Y: state.Rng.Next(globals.Map.Height));
+                }
+                while (HitsWall(state.Food));
+            }
+            (int X, int Y) TileAhead((int X, int Y) xy, int dir)
+            {
+                switch (dir)
+                {
+                    case 0:
+                        xy = (xy.X, xy.Y - 1);
+                        break;
+                    case 1:
+                        xy = (xy.X + 1, xy.Y);
+                        break;
+                    case 2:
+                        xy = (xy.X, xy.Y + 1);
+                        break;
+                    case 3:
+                        xy = (xy.X - 1, xy.Y);
+                        break;
+                }
+                xy = (Mod(xy.X, globals.Map.Width), Mod(xy.Y, globals.Map.Height));
+                return xy;
+            }
+            double Distance((int X, int Y) p, (int X, int Y) q)
+            {
+                return Math.Abs(p.X - q.X) + Math.Abs(p.Y - q.Y);
+                //return Math.Sqrt(Math.Pow(p.X - q.X, 2) + Math.Pow(p.Y - q.Y, 2));
+            }
+            bool HitsWall((int X, int Y) p)
+            {
+                return globals.Map.Cells[p.X + globals.Map.Width * p.Y] == 0;
+            }
+            bool HitsBody((int X, int Y) p)
+            {
+                return state.Snake.Body.Skip(1).Any(q => q.Equals(p));
+            }
+            int Mod(int x, int m)
+            {
+                return (x % m + m) % m;
+            }
+            bool MoveOrReset()
+            {
+                var xy = TileAhead(state.Snake.Body[0], state.Snake.Direction);
+                if (HitsBody(xy) || HitsWall(xy))
+                {
+                    state.Score = 0;
+                    Reset();
+                    return false;
+                }
+                for (int i = state.Snake.Body.Count - 1; i >= 1; i--)
+                {
+                    state.Snake.Body[i] = state.Snake.Body[i - 1];
+                }
+                state.Snake.Body[0] = xy;
+                return true;
+            }
         }
     }
 }
